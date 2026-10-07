@@ -1,0 +1,2284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta name="robots" content="noindex,nofollow">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>（仮）タスクの街の地図｜社内モック 10/4版</title>
+<link rel="icon" href="https://raw.githubusercontent.com/chiby1221smile/nekonote-assets/main/tegaki_nikuQ.png">
+<style>
+html,body{overflow-x:hidden}
+body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-family:"Hiragino Sans","Noto Sans JP",system-ui,sans-serif}
+.page-note{max-width:900px;margin:0 auto 14px;font-size:.84rem;color:#465563;line-height:1.7}
+.page-note b{color:#232f3a}
+.mode-toggle{max-width:900px;margin:0 auto 16px;display:flex;gap:8px}
+.mode-btn{appearance:none;cursor:pointer;border:1px solid #e6c866;border-radius:4px;background:#fffdf0;color:#232f3a;font:inherit;font-size:14px;font-weight:700;padding:8px 14px}
+.mode-btn.active{background:#ffcc00;border-color:#e0ac00;color:#3a2d00;box-shadow:2px 2px 0 #e0ac00}
+
+/* ===== 共通（ひし形タイル・ポップオーバー・モーダルはモード共通） ===== */
+:root{--ink:#232f3a;--sub:#465563;--paper:#fffcf2;--paper2:#fff6d9;--paper3:#ffe9a8;--card:#fffdf0;--line:#e6c866;--red:#ffcc00;--red-dark:#e0ac00;--light-red:#fff3bf;--disabled-bg:#f0e6c2;--disabled-ink:#6b5d33;
+  /* ---- 地図の中だけで使う色（2026-10-04：黄色をほぼ使わない指定のため、上のUI用の色とは別に用意） ---- */
+  --map-grass:#cfe3c6;--map-grass2:#bcd9ae;--map-soil:#b9a987;--map-road:#9aa0a6;--map-road-edge:#7e848b;--map-road-line:#f2f2ee;
+  --map-constr:#d98b3f;--map-constr-dark:#b96f2c;--map-half:#b9a98b;--map-half-dark:#998562;
+  --bt-house:#c97b5f;--bt-shop:#5b89b5;--bt-office:#6b7280;--bt-tower:#454f63;--bt-public:#3f7d58;
+  /* ---- 道路（2026-10-05：縞模様をやめて1枚のアスファルトに。歩道・縁石を追加） ---- */
+  --map-sidewalk:#d8d4c8;--map-curb:#8a8577;--map-sidewalk-edge:#f2efe4;
+  --map-road-noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0'/%3E%3C/filter%3E%3Crect width='48' height='48' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* ---- 放置（2026-10-05・仮：タスクが動いていない日数で見た目を変える） ---- */
+  --map-neglect-text:#6b6558;--map-smoke:#9a958c;--map-smoke-dark:#5f5b52;--map-fire-smoke-dark:#3a3630}
+.btn{appearance:none;cursor:pointer;border:1px solid var(--red);border-radius:3px;background:var(--red);color:#3a2d00;font:inherit;font-size:15px;font-weight:700;padding:9px 13px}
+.btn.primary{box-shadow:3px 3px 0 var(--red-dark)}
+.btn:hover{background:var(--red-dark);border-color:var(--red-dark)}
+.msg{margin-top:12px;padding:10px 12px;border-left:3px solid var(--red-dark);background:var(--light-red);color:var(--ink);font-weight:700;font-size:14px}
+[hidden]{display:none!important}
+.tabbar{display:flex;gap:6px;margin-bottom:10px}
+.tab-btn{flex:1;appearance:none;cursor:pointer;border:1px solid var(--line);border-radius:4px;background:var(--card);color:var(--sub);font:inherit;font-size:13px;font-weight:700;padding:8px 4px}
+.tab-btn.active{background:var(--red);border-color:var(--red-dark);color:#3a2d00}
+.panel-title{font-size:.78rem;font-weight:700;color:var(--sub);letter-spacing:.06em;margin:0 0 6px}
+
+/* ---- 街の地図 ---- */
+.iso-viewport{position:relative;height:420px;overflow:hidden;border:1px solid var(--line);border-radius:6px;background:var(--map-grass);touch-action:none;user-select:none;cursor:grab}
+.iso-viewport:active{cursor:grabbing}
+.iso-stage{position:absolute;left:0;top:0;will-change:transform;background:var(--map-grass)}
+.iso-road{position:absolute;width:128px;height:64px;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);background-color:var(--map-road);background-image:var(--map-road-noise);background-repeat:repeat;background-size:48px 48px;transform:scale(1.015);pointer-events:none}
+.iso-road-walk{position:absolute;left:0;top:0;width:128px;height:64px;pointer-events:none;overflow:visible}
+.iso-deco{position:absolute;width:128px;height:64px;pointer-events:none}
+.iso-deco-inner{position:absolute;left:50%;bottom:4px;transform:translate(-50%,0);width:66px;height:66px}
+.iso-deco-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;mix-blend-mode:normal}
+.iso-deco-fallback{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:1.5rem;background:var(--map-grass2);border:1px solid var(--map-soil);border-radius:50%}
+.iso-block-tag{position:absolute;transform:translate(-50%,-100%);font-size:10px;font-weight:700;color:var(--ink);background:rgba(255,253,240,.88);border:1px solid rgba(203,185,138,.9);border-radius:9px;padding:1px 7px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s ease;z-index:100000}
+.iso-block-tag.is-visible{opacity:1}
+.iso-tile{position:absolute;width:144px;height:192px;padding:0;margin:0;border:0;background:transparent;pointer-events:none}
+.iso-tile-hit{position:absolute;left:8px;top:128px;width:128px;height:64px;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);pointer-events:auto;cursor:pointer;background:transparent}
+.iso-tile-hit.is-hl{background:rgba(255,255,255,.55);box-shadow:inset 0 0 0 2px rgba(35,47,58,.3)}
+/* 建物の絵（立っている部分）も押せるように、地面のひし形の上に縦に伸びる当たり判定を重ねる（絵の幅いっぱいにはしない） */
+.iso-tile-body-hit{position:absolute;left:8px;width:128px;pointer-events:auto;cursor:pointer;background:transparent}
+.iso-tile-inner{position:relative;width:100%;height:100%;pointer-events:none}
+.iso-tile-inner img{position:absolute;mix-blend-mode:normal}
+.iso-tile-inner .iso-fallback{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:4px}
+.iso-fallback-icon{font-size:1.15rem;line-height:1;margin-bottom:-4px}
+.iso-fallback-diamond{width:60px;height:30px;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);border:1px solid var(--map-soil)}
+.iso-fallback-diamond.state-empty{background:repeating-linear-gradient(45deg,var(--map-grass),var(--map-grass) 4px,var(--map-grass2) 4px,var(--map-grass2) 8px)}
+.iso-fallback-diamond.state-building{background:var(--map-constr);border-color:var(--map-constr-dark)}
+.iso-fallback-diamond.state-built{background:var(--map-half);border-color:var(--map-half-dark)}
+.iso-fallback-diamond.state-complete{background:var(--bt-house);border-color:var(--bt-house)}
+.iso-tile-inner.iso-tile-justbuilt img,.iso-tile-inner.iso-tile-justbuilt .iso-fallback-diamond{animation:iso-pop .5s ease}
+@keyframes iso-pop{0%{transform:scale(.4) translateY(10%)}60%{transform:scale(1.15)}100%{transform:scale(1)}}
+/* ---- 放置（2026-10-05・仮） ---- */
+.iso-tile.iso-neglect-1 .iso-tile-inner{filter:saturate(.55)}
+.iso-tile.iso-neglect-2 .iso-tile-inner,.iso-tile.iso-neglect-3 .iso-tile-inner{filter:saturate(.55) brightness(.82)}
+.iso-neglect-weeds-wrap,.iso-neglect-crow-wrap{position:absolute;pointer-events:none}
+.iso-neglect-weeds-img,.iso-neglect-crow-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.iso-neglect-fallback{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:11px;line-height:1;text-align:center;white-space:nowrap}
+.iso-smoke{position:absolute;pointer-events:none}
+.iso-smoke-puff{position:absolute;left:50%;bottom:0;width:var(--smoke-size,16px);height:var(--smoke-size,16px);margin-left:calc(var(--smoke-size,16px)/-2);border-radius:50%;background:var(--map-smoke-dark);opacity:0;transform:translate(0,0) scale(.6);animation:iso-smoke-rise 2.6s ease-out infinite}
+.iso-smoke-puff:nth-child(1){animation-delay:0s;left:50%;--drift:5px}
+.iso-smoke-puff:nth-child(2){animation-delay:.55s;left:62%;--drift:-7px}
+.iso-smoke-puff:nth-child(3){animation-delay:1.1s;left:40%;--drift:6px}
+.iso-smoke-puff:nth-child(4){animation-delay:1.65s;left:55%;--drift:-5px}
+.iso-smoke-puff:nth-child(5){animation-delay:2.2s;left:45%;--drift:4px}
+@keyframes iso-smoke-rise{0%{opacity:0;transform:translate(0,0) scale(.55)}12%{opacity:.7}70%{opacity:.35}100%{opacity:0;transform:translate(var(--drift,0px),var(--smoke-rise,-75px)) scale(2)}}
+/* ---- 火事（2026-10-05・仮：40日以上。炎は overlay_fire.png を建物の上半分にかぶせる。読めないときは🔥） ---- */
+.iso-fire-wrap{position:absolute;pointer-events:none;transform-origin:50% 100%}
+.iso-fire-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;transform-origin:50% 100%;animation:iso-fire-flicker-a .75s ease-in-out infinite}
+.iso-fire-wrap.iso-fire-b .iso-fire-img{animation-name:iso-fire-flicker-b;animation-duration:.95s}
+.iso-fire-fallback{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:1.3rem;line-height:1;transform-origin:50% 100%;animation:iso-fire-flicker-a .75s ease-in-out infinite}
+.iso-fire-wrap.iso-fire-b .iso-fire-fallback{animation-name:iso-fire-flicker-b;animation-duration:.95s}
+@keyframes iso-fire-flicker-a{0%{transform:scaleY(1) scaleX(1);filter:brightness(1)}35%{transform:scaleY(1.08) scaleX(.96);filter:brightness(1.18)}70%{transform:scaleY(.93) scaleX(1.05);filter:brightness(.9)}100%{transform:scaleY(1) scaleX(1);filter:brightness(1)}}
+@keyframes iso-fire-flicker-b{0%{transform:scaleY(1) scaleX(1);filter:brightness(1)}40%{transform:scaleY(.92) scaleX(1.06);filter:brightness(.88)}75%{transform:scaleY(1.1) scaleX(.94);filter:brightness(1.2)}100%{transform:scaleY(1) scaleX(1);filter:brightness(1)}}
+.iso-fire-wrap.is-dousing{animation:iso-fire-dowse .8s ease-in forwards}
+@keyframes iso-fire-dowse{0%{transform:scale(1);opacity:1}100%{transform:scale(.05);opacity:0}}
+.iso-smoke-puff.iso-smoke-puff-fire{background:var(--map-fire-smoke-dark)}
+.iso-smoke.is-out{animation:iso-smoke-fadeout .7s ease-in forwards}
+@keyframes iso-smoke-fadeout{0%{opacity:1}100%{opacity:0}}
+/* ---- 火事の煙の絵（2026-10-05・仮：overlay_smoke.png。読めないときは丸い玉の煙=.iso-smokeを代わりに出す） ---- */
+.iso-firesmoke-wrap{position:absolute;pointer-events:none}
+.iso-firesmoke-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;transform-origin:50% 100%;animation:iso-firesmoke-rise 4s ease-in-out infinite}
+.iso-firesmoke-wrap.iso-firesmoke-b .iso-firesmoke-img{animation-delay:-2s}
+@keyframes iso-firesmoke-rise{0%{transform:translate(0,0) scale(1);opacity:0}12%{opacity:.85}50%{transform:translate(3%,-11%) scale(1.08);opacity:.85}88%{opacity:.3}100%{transform:translate(-2%,-20%) scale(1.15);opacity:0}}
+.iso-firesmoke-wrap.is-out{animation:iso-smoke-fadeout .7s ease-in forwards}
+/* ---- 消防車の放水（2026-10-05・仮：止まっている間に建物の炎へ水しぶきを飛ばす） ---- */
+.iso-water-spray{position:absolute;left:0;top:0;pointer-events:none;z-index:9}
+.iso-water-drop{position:absolute;left:0;top:0;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#7fd4ef;opacity:0;animation:iso-water-arc .55s ease-out infinite}
+.iso-water-drop:nth-child(1){animation-delay:0s}
+.iso-water-drop:nth-child(2){animation-delay:.08s}
+.iso-water-drop:nth-child(3){animation-delay:.16s}
+.iso-water-drop:nth-child(4){animation-delay:.24s}
+.iso-water-drop:nth-child(5){animation-delay:.32s}
+.iso-water-drop:nth-child(6){animation-delay:.4s}
+@keyframes iso-water-arc{0%{opacity:0;transform:translate(0,0) scale(.6)}18%{opacity:1}55%{opacity:.9;transform:translate(calc(var(--water-dx,40px)*.55),calc(var(--water-dy,-50px)*.65)) scale(1)}100%{opacity:0;transform:translate(var(--water-dx,40px),var(--water-dy,-50px)) scale(.4)}}
+.iso-meetian-badge{position:absolute;top:-4px;right:6px;width:16px;height:16px;border-radius:50%;background:var(--ink);color:#fff;font-size:.6rem;font-weight:800;display:flex;align-items:center;justify-content:center;z-index:6;pointer-events:none}
+.iso-zoom-controls{position:absolute;right:8px;bottom:8px;display:flex;flex-direction:column;gap:6px;z-index:10}
+.iso-zoom-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--red-dark);background:var(--red);color:#3a2d00;font-size:1.1rem;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.iso-tag-toggle{font-size:.8rem;background:var(--card);color:var(--sub);border:1px solid var(--line)}
+.iso-tag-toggle.is-on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* ---- 地図の隅：Meetianとつないだ場合（仮） ---- */
+.iso-meetian-ctrl{position:absolute;left:6px;top:6px;right:6px;z-index:10;display:flex;flex-wrap:wrap;gap:4px;align-items:flex-start;pointer-events:none}
+.iso-meetian-ctrl>*{pointer-events:auto}
+.iso-meetian-toggle{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:12px;padding:3px 8px;font-size:10px;font-weight:700;color:var(--ink);cursor:pointer}
+.iso-meetian-toggle input{width:14px;height:14px;margin:0}
+.iso-meetian-actions{display:flex;flex-wrap:wrap;gap:4px}
+.iso-meetian-actions .btn{font-size:10px;padding:5px 8px}
+.iso-meetian-ctrl .msg{flex-basis:100%;font-size:11px;padding:6px 8px;margin:2px 0 0}
+.iso-resident{position:absolute;transform:translate(-50%,-90%);display:flex;flex-direction:column;align-items:center;z-index:4;pointer-events:auto;cursor:pointer}
+.iso-resident-house{display:block;width:88px;height:88px;object-fit:contain;margin-bottom:-22px}
+.iso-resident.is-selected{filter:drop-shadow(0 0 3px var(--red-dark)) drop-shadow(0 0 5px var(--red-dark))}
+.iso-bigpark{position:absolute;transform:translate(-50%,-56%);pointer-events:none;z-index:1}
+.iso-bigpark img{width:100%;height:100%;object-fit:contain;display:block}
+.iso-resident-figure{font-size:13px;line-height:1;margin-top:1px}
+.iso-resident-initials{font-size:9px;font-weight:800;color:var(--ink);background:rgba(255,255,255,.88);border:1px solid var(--line);border-radius:8px;padding:0 5px;margin-top:1px;white-space:nowrap;transform:scale(clamp(1,var(--inv,1),3.5));transform-origin:center top}
+.iso-truck{position:absolute;top:0;left:-40px;line-height:1;z-index:9;pointer-events:none}
+.iso-truck-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.iso-truck-fallback{position:absolute;inset:0;align-items:center;justify-content:center;font-size:22px}
+.iso-tile.is-selected .iso-tile-inner{filter:drop-shadow(0 0 2px var(--red-dark)) drop-shadow(0 0 6px var(--red-dark)) brightness(1.08)}
+
+/* ---- 吹き出しの出し方（仮）A/B 切り替え・固定の情報欄 ---- */
+.bubble-mode-toggle{max-width:900px;margin:0 auto 16px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.bubble-mode-label{font-size:.82rem;color:#465563}
+.bubble-mode-btn{appearance:none;cursor:pointer;border:1px solid #e6c866;border-radius:4px;background:#fffdf0;color:#232f3a;font:inherit;font-size:13px;font-weight:700;padding:6px 12px}
+.bubble-mode-btn.active{background:#ffcc00;border-color:#e0ac00;color:#3a2d00}
+.bubble-panel{margin-top:10px;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:10px 12px;font-size:13px;color:var(--ink)}
+.bubble-panel .pop-name{margin:0 0 2px}
+.bubble-panel .pop-sub{margin:0 0 7px}
+.bubble-panel-empty{margin:0;color:var(--sub);font-size:13px}
+.bubble-commit-row{display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--line);padding:8px 0;cursor:pointer}
+.bubble-commit-row:first-child{border-top:0}
+.bubble-commit-meta{font-size:11px;color:var(--sub)}
+.bubble-commit-dismiss{align-self:flex-start;margin-top:4px;font-size:10px;border:1px solid var(--line);background:var(--paper2);color:var(--sub);border-radius:4px;padding:3px 7px;cursor:pointer}
+.bubble-commit-note{font-size:10px;color:var(--sub);margin:0 0 6px}
+
+/* ---- 4象限 ---- */
+.q-note{font-size:12px;color:var(--sub);margin:0 0 8px}
+.q-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;height:340px}
+.q-cell{border:1px solid var(--line);border-radius:6px;background:var(--card);padding:6px;overflow-y:auto}
+.q-cell-label{font-size:10px;font-weight:800;color:var(--sub);margin:0 0 5px}
+.q-chip{display:inline-flex;align-items:flex-start;gap:3px;max-width:100%;border:1px solid var(--line);background:var(--paper2);border-radius:10px;padding:3px 7px;margin:0 3px 5px 0;font-size:11px;color:var(--ink);cursor:pointer}
+.q-chip.is-hl{background:var(--red);border-color:var(--red-dark);color:#3a2d00}
+.q-chip .qt-wrap{display:flex;flex-direction:column;max-width:140px}
+.q-chip .qt{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.q-chip .q-chip-parent{font-size:9px;color:var(--sub);opacity:.85;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.q-chip.is-hl .q-chip-parent{color:#3a2d00;opacity:.8}
+.q-chip.is-built .qt{text-decoration:line-through;opacity:.7}
+
+/* ---- 分解後のリスト ---- */
+.list-controls{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+.list-search{width:100%;box-sizing:border-box;font-size:16px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:var(--card);color:var(--ink)}
+.list-hide-toggle{font-size:11px;color:var(--sub);display:flex;align-items:center;gap:4px}
+.list-wrap{height:300px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;padding:8px;background:var(--card)}
+.list-block{margin-bottom:12px}
+.list-block-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:800;color:var(--ink);margin-bottom:4px}
+.list-row{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:4px;cursor:pointer;font-size:13px;color:var(--ink)}
+.list-row.is-hl{background:var(--light-red)}
+.list-row .lt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.list-row.is-built .lt{text-decoration:line-through;opacity:.65}
+.list-row.list-row-grandchild{padding-left:30px;font-size:12px}
+.list-arrow{width:14px;display:inline-block;text-align:center;cursor:pointer;font-size:11px;color:var(--sub);flex:none}
+.list-arrow-spacer{width:14px;display:inline-block;flex:none}
+.list-addgrandchild-btn{margin-left:auto;flex:none;font-size:10px;border:1px solid var(--line);background:var(--paper2);color:var(--sub);border-radius:4px;padding:3px 7px;cursor:pointer}
+
+/* ---- スマホ枠 ---- */
+.demo-shell .demo-phone{max-width:380px;width:100%;margin:0 auto;padding:16px 10px 18px;background:var(--ink);border-radius:34px;box-shadow:5px 5px 0 rgba(35,47,58,.35)}
+.demo-shell .demo-phone-top{display:flex;align-items:center;justify-content:center;gap:10px;padding-bottom:10px}
+.demo-shell .demo-phone-camera{width:8px;height:8px;border-radius:50%;background:#0a0d12}
+.demo-shell .demo-phone-speaker{width:52px;height:5px;border-radius:4px;background:#0a0d12}
+.demo-shell .demo-phone-home{width:42px;height:42px;margin:14px auto 0;border-radius:50%;border:2px solid rgba(255,255,255,.4)}
+.demo-shell .demo-phone-screen{position:relative;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;aspect-ratio:9/19;min-height:560px;border-radius:22px;background:var(--paper2);padding:18px 16px 22px}
+.demo-shell .demo-view{display:none}
+.demo-shell .demo-view.active{display:block}
+.demo-shell .demo-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:16px;color:var(--ink);font-weight:900}
+.demo-shell .tag{display:inline-block;border:1px solid currentColor;padding:1px 8px;font-size:.74rem}
+.demo-shell .tag-red{color:var(--red-dark)}
+.demo-shell .muted{color:var(--sub);font-size:.9rem}
+.demo-shell .demo-screen-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}
+.demo-shell .demo-back{border:0;background:transparent;color:var(--sub);font:inherit;font-size:.82rem;cursor:pointer;padding:5px 0;text-decoration:underline}
+.demo-shell .demo-helper{margin:4px 0 10px;color:var(--ink);font-size:14px;line-height:1.6}
+.demo-shell #demo-home{position:absolute;top:0;right:0;bottom:0;left:0;padding:40px 20px 46px;background:linear-gradient(165deg,var(--paper) 0%,var(--paper2) 55%,var(--paper3) 100%);text-align:center}
+.demo-shell .demo-home-app{appearance:none;cursor:pointer;border:0;background:transparent;color:inherit;font:inherit;display:flex;flex-direction:column;align-items:center;gap:10px;margin:0 auto;padding:6px;width:120px}
+.demo-shell .demo-home-app-icon{display:flex;align-items:center;justify-content:center;width:76px;height:76px;margin:0 auto;border-radius:18px;background:var(--red);box-shadow:3px 3px 0 var(--red-dark);color:#3a2d00;font-size:1.6rem;font-weight:900;animation:demo-home-pulse 2.2s ease-in-out infinite}
+.demo-shell .demo-home-app-name{margin:0;color:var(--ink);font-size:.86rem;font-weight:800}
+.demo-shell .demo-home-hint{margin:18px 0 0;color:var(--ink);font-size:1.05rem;font-weight:900}
+.demo-shell .demo-home-note{margin:26px 0 0;color:var(--sub);font-size:.86rem}
+@keyframes demo-home-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
+.demo-shell .demo-input{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:3px;background:var(--card);padding:11px 12px;font:inherit;font-size:16px;color:var(--ink);resize:vertical}
+.demo-shell .breakdown-list{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.demo-shell .breakdown-item{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);border-radius:5px;padding:8px 10px;font-size:.88rem;color:var(--ink)}
+.demo-shell .breakdown-remove{appearance:none;border:1px solid var(--line);background:var(--paper2);color:var(--sub);font:inherit;font-size:.78rem;border-radius:4px;padding:4px 8px;cursor:pointer}
+@media (max-width:760px){.iso-viewport{height:360px}}
+
+/* ---- PC枠 ---- */
+.pc-frame{max-width:900px;margin:0 auto;border:1px solid #cbb96a;border-radius:10px;background:#fffdf0;overflow:hidden;box-shadow:4px 4px 0 rgba(35,47,58,.15)}
+.pc-head{display:flex;align-items:center;gap:6px;padding:8px 12px;background:#efe3b0;border-bottom:1px solid #cbb96a}
+.pc-dot{width:9px;height:9px;border-radius:50%;background:#e0ac00}
+.pc-url{flex:1;margin-left:8px;background:#fffdf0;border:1px solid #cbb96a;border-radius:10px;padding:3px 10px;font-size:11px;color:var(--sub)}
+.pc-body{padding:14px;overflow-x:auto}
+.pc-cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.pc-col{min-width:0}
+.pc-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+
+/* ---- ポップオーバー・モーダル ---- */
+.popover{position:fixed;z-index:50;max-width:220px;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:9px 11px;box-shadow:3px 3px 0 var(--line);font-size:13px;animation:pop-in .18s ease}
+@keyframes pop-in{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+.pop-name{margin:0 0 2px;font-weight:800;color:var(--ink)}
+.pop-sub{margin:0 0 7px;color:var(--sub);font-size:11px}
+.pop-neglect{margin:0 0 7px;color:var(--map-neglect-text);font-size:11px}
+.pop-actions{display:flex;gap:6px}
+.modal-overlay{position:fixed;inset:0;background:rgba(35,47,58,.45);display:flex;align-items:center;justify-content:center;z-index:60;padding:16px}
+.modal-box{max-width:360px;width:100%;background:var(--card);border-radius:8px;padding:16px;box-shadow:4px 4px 0 var(--line)}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.modal-head h3{margin:0;font-size:1rem;color:var(--ink)}
+
+/* ---- 声で入力（仮・2026-10-07追加） ---- */
+/* 見た目は.bubble-mode-btnと同じにするが、クラス名は分ける（既存の .bubble-mode-btn は
+   document.querySelectorAll('.bubble-mode-btn') で全体を見ているため、同じクラスを使うと
+   既存の吹き出し出し方A/Bの切り替えが壊れる） */
+.voice-mode-btn{appearance:none;cursor:pointer;border:1px solid #e6c866;border-radius:4px;background:#fffdf0;color:#232f3a;font:inherit;font-size:13px;font-weight:700;padding:6px 12px}
+.voice-mode-btn.active{background:#ffcc00;border-color:#e0ac00;color:#3a2d00}
+.voice-input-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+.voice-btn{display:inline-flex;align-items:center;gap:7px;min-height:44px}
+.voice-btn-icon{flex:none}
+.voice-listening-indicator{font-size:12px;font-weight:700;color:var(--red-dark);animation:voice-blink 1s step-start infinite}
+@keyframes voice-blink{50%{opacity:.25}}
+.voice-interim{margin:6px 0 0;font-size:12px;color:var(--sub)}
+.voice-iphone-card{margin-top:10px;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:10px 12px}
+.voice-iphone-text{margin:0 0 8px;font-size:13px;color:var(--ink)}
+.voice-iphone-text-sub{margin:8px 0 0;font-size:12px;color:var(--sub)}
+.voice-iphone-diagram{border:1px solid var(--line);border-radius:4px;background:var(--paper2);padding:6px}
+.voice-iphone-keyboard{display:flex;flex-direction:column;gap:3px}
+.voice-iphone-key-row{display:flex;align-items:center;gap:3px}
+.voice-iphone-key{flex:1;height:10px;border-radius:2px;background:var(--card);border:1px solid var(--line)}
+.voice-iphone-key-wide{flex:5}
+.voice-iphone-mic-dot{flex:none;width:22px;height:16px;border-radius:8px;background:var(--red);border:1px solid var(--red-dark);display:flex;align-items:center;justify-content:center}
+
+/* ---- AIがプロジェクトを分ける（仮・2026-10-07追加） ---- */
+.newproj-result-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.npcard{border:1px solid var(--line);border-radius:6px;background:var(--card);padding:10px;margin-bottom:10px}
+.npcard.npcard-invalid{border:3px solid var(--red-dark);box-shadow:0 0 0 2px var(--light-red)}
+.npcard-name{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:3px;background:var(--paper);padding:9px 10px;font:inherit;font-size:16px;color:var(--ink);margin-bottom:8px}
+.npcard-field{margin-bottom:10px}
+.npcard-label{margin:0 0 5px;font-size:12px;font-weight:700;color:var(--sub)}
+.npcard-hint{margin:0 0 6px;padding:4px 8px;border-left:3px solid var(--red-dark);background:var(--light-red);color:var(--ink);font-weight:700;font-size:11px}
+.npcard-due-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.npcard-date{box-sizing:border-box;border:1px solid var(--line);border-radius:3px;background:var(--paper);padding:9px 10px;font:inherit;font-size:16px;color:var(--ink);flex:1;min-width:140px}
+.npcard-choice{font-size:13px;padding:7px 11px}
+.npcard-choice.is-off{background:var(--card);border-color:var(--line);color:var(--sub)}
+.npcard-really-row{display:flex;gap:6px;flex-wrap:wrap}
+.npcard-note{margin:6px 0 0;font-size:11px;color:var(--sub)}
+.npcard-remove-btn{background:var(--card);border-color:var(--line);color:var(--sub);font-size:12px;padding:6px 10px}
+/* カード内の小さなタスク一覧（.demo-shellの外なので同名クラスに専用のスタイルを与える） */
+.npcard .breakdown-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.npcard .breakdown-item{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);background:var(--paper);border-radius:5px;padding:8px 10px;font-size:.88rem;color:var(--ink)}
+.npcard .breakdown-remove{appearance:none;border:1px solid var(--line);background:var(--paper2);color:var(--sub);font:inherit;font-size:.78rem;border-radius:4px;padding:4px 8px;cursor:pointer;white-space:nowrap;min-width:44px;flex:none}
+.btn-subtle{background:var(--card);border-color:var(--line);color:var(--sub);box-shadow:none}
+.btn-subtle:hover{background:var(--paper2);border-color:var(--line);color:var(--sub)}
+</style>
+</head>
+<body>
+
+<p class="page-note">
+社内モック（仮）10/4版です。触っても実際のデータには保存されません。<br>
+<b>今回あらたに見てほしいところ：</b><b>10/7追加：</b>⑩「新しいプロジェクトを足す」で「声で入力（仮）」を押して話すと文字が入るか（ネコノテが出すURLをChromeで開いたとき。ファイルをダブルクリックで開いた形では声は試せません）／上の「声の入力の試し方（仮）」でiPhoneのホーム画面・聞き取れなかった・マイクを許可しなかった・対応していないブラウザの表示を見る　⑪「（仮）例を入れる」→「（仮）AIに分解してもらう」で3つのプロジェクトに分かれるか／「分けずに1つにまとめる」で戻せるか／期限か「ホントにやる？」に答えずに建てるとどう出るか　①上の「吹き出しの出し方（仮）：A／B」を切り替えて、建物・タスクを選んだときの出方を見比べられるか（Aは地図の下／横の固定欄・Bは小さな名札）　②4象限やリストでタスクを選ぶと地図の建物も光るか／地図の建物を選ぶと4象限・リストのそのプロジェクトのタスクが全部光るか（はっきり分かる縁取り・明るさになっているか）　③リストで孫タスクが子タスクの下に一段下がって並び、畳む・開くができるか／子の行の「＋孫（仮）」で孫を増やせるか／4象限にも孫タスクのカードが出て親の子タスク名が小さく添えられているか／地図の「あと○つで完成」が孫がある子は孫の数で数えているか　④「Meetianとつないだ場合（仮）」をオンにして住民を押すと、その人（フルネーム（仮））の残っている約束の一覧が出るか／一覧から1件選ぶと4象限・リストのそのタスクが光るか／「やらない（社交辞令）」を押すとその行が隠れるか（Meetianへは書き戻さないと小さく書いてあるか）　⑤建物を押すとき、地面の小さいひし形を外して建物の絵の部分を押しても選べるか／吹き出しの出し方「B」のとき、名札が押した建物・タスクのすぐ横（入らなければ下）に出るか（画面の左上に飛んでいないか）　⑥完成した建物の種類が増えました（高層ビル・工場）。製作寄りのプロジェクトは工場、物販寄りのプロジェクトはお店、どちらでもなくタスクが多めのプロジェクトは高層ビルになっているか見てください（どれも（仮）で、本番はAIがプロジェクト名とタスクの内容から判断します）。　⑦区画の大きさが建物によって違います（高層ビル・図書館風は4マス、工場・オフィスは庭つきの2マス、それ以外は1マスの（仮））。隣の建物と地面が重なっていないか・庭（木立や公園の絵）が建物の種類に合わせて出ているか見てください。　⑧道路に歩道と縁石を付けました（仮）。マスの境目で道路の模様が切れていないか・街区に面した側に歩道がつながって出ているか見てください。　⑨放置した日数で建物の見た目が変わります（仮・日数はすべて仮）：15日で雑草とくすみ、25日でカラス、40日で火事（炎と煙）になります。該当のプロジェクトでタスクを1つ動かすと元の見た目に戻るか・火事だったものは消防車が来て水をかけ、炎が消えたあと煙も薄くなって消えてから戻るか見てください。<br>
+<b>前回までに確認済み（壊していないか合わせて確認）：</b>道路のつながり・街区の大きさの変化・公園の置き方・完成した建物5種類・地図の色・住民の灯り・「会議が終わった」の工事の車・「Meetianとつながらなかった」の案内・「新しいプロジェクトを足す」の空欄エラーと0件エラー。
+</p>
+
+<div class="mode-toggle">
+  <button type="button" class="mode-btn active" data-mode="mobile">スマホで見る</button>
+  <button type="button" class="mode-btn" data-mode="pc">PCで見る</button>
+</div>
+
+<div class="bubble-mode-toggle">
+  <span class="bubble-mode-label">吹き出しの出し方（仮）：</span>
+  <button type="button" class="bubble-mode-btn active" data-bubble="A">A</button>
+  <button type="button" class="bubble-mode-btn" data-bubble="B">B</button>
+</div>
+
+<!-- ============ 声の入力の試し方（仮・2026-10-07追加） ============ -->
+<div class="bubble-mode-toggle" id="voice-mode-toggle">
+  <span class="bubble-mode-label">声の入力の試し方（仮）：</span>
+  <button type="button" class="voice-mode-btn active" data-voicemode="real">この端末で実際に試す</button>
+  <button type="button" class="voice-mode-btn" data-voicemode="iphone">iPhoneのホーム画面から開いた場合</button>
+  <button type="button" class="voice-mode-btn" data-voicemode="nospeech">声が聞き取れなかった場合</button>
+  <button type="button" class="voice-mode-btn" data-voicemode="notallowed">マイクを許可しなかった場合</button>
+  <button type="button" class="voice-mode-btn" data-voicemode="noapi">声の入力に対応していないブラウザ</button>
+</div>
+
+<!-- ============ スマホ枠 ============ -->
+<div class="demo-shell" id="mobile-wrap">
+  <div class="demo-bar"><span>タスクの街（仮） <small class="muted">社内モック</small></span><span class="tag tag-red">保存しません</span></div>
+  <div class="demo-phone">
+    <div class="demo-phone-top"><span class="demo-phone-camera"></span><span class="demo-phone-speaker"></span></div>
+    <div class="demo-phone-screen">
+      <div class="demo-view active" id="demo-home">
+        <p class="muted" style="font-weight:800">スマホのホーム画面</p>
+        <button class="demo-home-app" type="button" id="home-open-btn">
+          <span class="demo-home-app-icon">🏘️</span>
+          <span class="demo-home-app-name">タスクの街（仮）</span>
+        </button>
+        <p class="demo-home-hint">このアイコンを押してください</p>
+        <p class="demo-home-note">ホーム画面のアイコンから開けます。</p>
+      </div>
+      <div class="demo-view" id="demo-hub">
+        <div class="demo-screen-head">
+          <h3 style="margin:0;font-size:1rem">タスクの街（仮）</h3>
+          <button class="demo-back" type="button" id="hub-home-btn">← ホーム画面に戻る</button>
+        </div>
+        <div class="tabbar">
+          <button type="button" class="tab-btn active" data-tab="map">地図</button>
+          <button type="button" class="tab-btn" data-tab="quadrant">4象限</button>
+          <button type="button" class="tab-btn" data-tab="list">リスト</button>
+        </div>
+        <div id="mobile-panel-slot"></div>
+        <div class="bubble-panel" id="bubble-panel-mobile" hidden></div>
+        <div style="margin-top:12px">
+          <button class="btn primary" type="button" id="mobile-newproj-btn">＋ 新しいプロジェクトを足す</button>
+        </div>
+      </div>
+    </div>
+    <div class="demo-phone-home"></div>
+  </div>
+</div>
+
+<!-- ============ PC枠 ============ -->
+<div class="pc-frame" id="pc-wrap" hidden>
+  <div class="pc-head"><span class="pc-dot" style="background:#e0ac00"></span><span class="pc-dot" style="background:#cbb96a"></span><span class="pc-dot" style="background:#efe3b0"></span><span class="pc-url">タスクの街（仮）― nekonote.local</span></div>
+  <div class="pc-body">
+    <div class="pc-top">
+      <span class="muted">地図・4象限・リストが同時に見られます</span>
+      <button class="btn primary" type="button" id="pc-newproj-btn">＋ 新しいプロジェクトを足す</button>
+    </div>
+    <div class="pc-cols">
+      <div class="pc-col"><p class="panel-title">街の地図</p><div id="pc-slot-map"></div></div>
+      <div class="pc-col"><p class="panel-title">4象限（重要度×緊急度）</p><div id="pc-slot-quadrant"></div></div>
+      <div class="pc-col"><p class="panel-title">分解後のリスト</p><div id="pc-slot-list"></div></div>
+    </div>
+    <div class="bubble-panel" id="bubble-panel-pc" hidden></div>
+  </div>
+</div>
+
+<!-- ============ 共有：ポップオーバー ============ -->
+<div class="popover" id="hover-popover" hidden></div>
+
+<!-- ============ 共有：タスクの中身モーダル ============ -->
+<div class="modal-overlay" id="task-modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head"><h3 id="task-block-name">-</h3><button class="demo-back" type="button" id="task-close-btn">閉じる</button></div>
+    <p class="demo-helper" id="task-name" style="margin-top:0">-</p>
+    <p class="muted" id="task-state">-</p>
+    <p class="muted" id="task-haskids-note" style="font-size:11px" hidden>孫が全部終わると自動で終わりになります（仮）</p>
+    <div style="margin-top:10px"><button class="btn primary" type="button" id="task-complete-btn">終わった</button></div>
+    <div class="msg" id="task-done-message" hidden>建物が建ちました</div>
+  </div>
+</div>
+
+<!-- ============ 共有：新しいプロジェクトを足すモーダル ============ -->
+<div class="modal-overlay" id="newproj-modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head"><h3>新しいプロジェクトを足す（仮）</h3><button class="demo-back" type="button" id="newproj-close-btn">閉じる</button></div>
+    <p class="muted" style="margin:0 0 4px">頭の中のことを一言</p>
+    <textarea class="demo-input" id="newproj-input" rows="3" placeholder="例：来月のイベントの準備をする" style="font-size:16px"></textarea>
+
+    <div class="voice-input-row">
+      <button type="button" class="btn voice-btn" id="voice-btn">
+        <svg class="voice-btn-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
+        <span id="voice-btn-label">声で入力（仮）</span>
+      </button>
+      <span class="voice-listening-indicator" id="voice-listening-indicator" hidden>● 聞いています（仮）</span>
+    </div>
+    <p class="voice-interim" id="voice-interim" hidden>聞き取り中：<span id="voice-interim-text"></span>（仮）</p>
+    <p class="msg" id="voice-error" hidden></p>
+    <div class="voice-iphone-card" id="voice-iphone-card" hidden>
+      <p class="voice-iphone-text">キーボードにあるマイクのマーク（右下あたり）を押して話してください（仮）</p>
+      <div class="voice-iphone-diagram" aria-hidden="true">
+        <div class="voice-iphone-keyboard">
+          <div class="voice-iphone-key-row"><span class="voice-iphone-key"></span><span class="voice-iphone-key"></span><span class="voice-iphone-key"></span><span class="voice-iphone-key"></span><span class="voice-iphone-key"></span><span class="voice-iphone-key"></span></div>
+          <div class="voice-iphone-key-row"><span class="voice-iphone-key"></span><span class="voice-iphone-key"></span><span class="voice-iphone-key"></span><span class="voice-iphone-key"></span><span class="voice-iphone-key"></span></div>
+          <div class="voice-iphone-key-row"><span class="voice-iphone-key"></span><span class="voice-iphone-key"></span><span class="voice-iphone-key"></span><span class="voice-iphone-key"></span></div>
+          <div class="voice-iphone-key-row">
+            <span class="voice-iphone-key voice-iphone-key-wide"></span>
+            <span class="voice-iphone-mic-dot">
+              <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="#3a2d00" stroke-width="2"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
+            </span>
+          </div>
+        </div>
+      </div>
+      <p class="voice-iphone-text-sub">マイクのマークが無いときは、iPhoneの設定→一般→キーボード→音声入力をオンにします（仮）</p>
+    </div>
+
+    <p class="msg" id="newproj-empty-error" hidden>ここに書いてから押してください。</p>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-subtle" type="button" id="newproj-sample-btn" style="font-size:13px;padding:7px 11px">（仮）例を入れる</button>
+      <button class="btn primary" type="button" id="newproj-breakdown-btn">（仮）AIに分解してもらう</button>
+    </div>
+    <div id="newproj-result" hidden>
+      <div class="newproj-result-head">
+        <p class="muted" id="newproj-result-title" style="margin:10px 0 6px"></p>
+        <button class="btn npcard-choice" type="button" id="newproj-merge-toggle-btn" hidden>分けずに1つにまとめる（仮）</button>
+      </div>
+      <div id="newproj-cards"></div>
+      <p class="msg" id="newproj-incomplete-error" hidden>期限と「ホントにやる？」に答えていないプロジェクトがあります（仮）</p>
+      <p class="msg" id="newproj-none-error" hidden>作るプロジェクトがありません（仮）</p>
+      <div style="margin-top:10px"><button class="btn primary" type="button" id="newproj-create-btn">この内容で建てる（0件）</button></div>
+    </div>
+    <div class="msg" id="newproj-success" hidden><span id="newproj-success-text"></span></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ======== 小さな道具：文字列から0〜1の値を再現性ありで作る（街区の位置ずらし・道の種類決めに使う） ========
+  function hash01(str){
+    let h=2166136261>>>0;
+    for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}
+    h^=h>>>13;h=Math.imul(h,0x45d9f3b)>>>0;h^=h>>>16;
+    return (h>>>0)/4294967295;
+  }
+
+  // ======== 完成した建物の7種類（仮：プロジェクトの中身とタスク数をもとに決める。プロジェクトごとに固定） ========
+  const BT_TYPES=['house','shop','office','tower','public','skyscraper','factory'];
+  // ③の「残り」で使うハッシュ振り分けの候補。shop・skyscraper・factoryは①②専用なので外す
+  const BT_HASH_TYPES=['house','office','tower','public'];
+  const BT_COLORS={house:'#c97b5f',shop:'#5b89b5',office:'#6b7280',tower:'#454f63',public:'#3f7d58',skyscraper:'#2f3a4f',factory:'#8a6d3b'};
+  const BT_ICONS={house:'🏠',shop:'🏪',office:'🏢',tower:'🗼',public:'🏛',skyscraper:'🏙',factory:'🏭'};
+  const MANY_TASKS_THRESHOLD=6; // （仮）このタスク数（孫があれば孫の数）以上なら高層ビルにする基準
+  function assignBuildingType(block){
+    // ①プロジェクトの中身（kind）で決める：製作寄りは工場、物販寄りはお店
+    if(block.kind==='make')return 'factory';
+    if(block.kind==='sell')return 'shop';
+    // ②どちらでもなく、タスク数（孫がある子は孫の数で数える＝leafTasksOfと同じ）が多めなら高層ビル
+    const count=leafTasksOf(block).length;
+    if(count>=MANY_TASKS_THRESHOLD)return 'skyscraper';
+    // ③残りは今と同じハッシュ（タスク数＋IDの文字コード）でhouse/office/tower/publicから選ぶ
+    let h=0;for(const ch of block.id)h=(h*31+ch.charCodeAt(0))>>>0;
+    return BT_HASH_TYPES[(count+h)%BT_HASH_TYPES.length];
+  }
+
+  // ======== Meetianとつないだ場合（仮）の住民（約束が残っている相手） ========
+  const RESIDENTS=[
+    {id:'res1',initials:'A.K',fullName:'安藤 薫（仮）',daysInactive:2},
+    {id:'res2',initials:'M.S',fullName:'水野 さとみ（仮）',daysInactive:9},
+    {id:'res3',initials:'T.Y',fullName:'田村 陽子（仮）',daysInactive:0},
+    {id:'res4',initials:'R.N',fullName:'中野 隆（仮）',daysInactive:5},
+    {id:'res5',initials:'H.I',fullName:'石田 寛（仮）',daysInactive:12},
+    {id:'res6',initials:'K.T',fullName:'高橋 健二（仮）',daysInactive:1}
+  ];
+  let bubbleMode='A'; // 吹き出しの出し方（仮）A/B
+  const dismissedCommitments=new Set(); // 住民の約束一覧で「やらない」を押した行（resId|bId:pId）
+
+  // ---- データ（重要度imp・緊急度urgは（仮）） ----
+  // kind:'make'（製作寄り）／'sell'（物販寄り）／指定なし（どちらでもない）（仮）。本番はAIがプロジェクト名とタスクから判断する
+  let blocks=[
+    {id:'campfire',name:'CAMPFIREダッシュボード',kind:'make',plots:[
+      {id:'cf1',label:'テスト用のクライアントを登録して4テーマの資料を見る',state:'empty',imp:'high',urg:'high',children:[
+        {id:'cf1a',label:'テスト用のクライアントを作る（仮）',state:'built',imp:'high',urg:'high'},
+        {id:'cf1b',label:'4テーマの資料を開いて見る（仮）',state:'empty',imp:'low',urg:'high'}
+      ]},
+      {id:'cf2',label:'テスト用の行を消す',state:'empty',imp:'low',urg:'high'},
+      {id:'cf3',label:'資料の中身の改善を本番に反映した',state:'built',imp:'high',urg:'low'},
+      {id:'cf4',label:'事務所PCのドライブ同期を確認した',state:'built',imp:'low',urg:'low'},
+      {id:'cf5',label:'請求書のPDF一覧を一緒に確認してほしいと言われた（仮）',state:'empty',imp:'low',urg:'low',meetian:true,residentId:'res3',due:'10/9（仮）'}
+    ]},
+    {id:'reuse',name:'リユース会の名簿整え',idleDays:27,plots:[
+      {id:'r1',label:'要確認の候補を選んで名簿に反映する',state:'building',imp:'high',urg:'high',children:[
+        {id:'r1a',label:'LINE名の先頭一致で候補を出す（仮）',state:'built',imp:'high',urg:'high'},
+        {id:'r1b',label:'候補を1件ずつ確認する（仮）',state:'empty',imp:'high',urg:'high'}
+      ]},
+      {id:'r2',label:'新しい人を全員名簿に足す',state:'empty',imp:'high',urg:'low'},
+      {id:'r3',label:'全員名簿の読み（フリガナ）を入れる',state:'empty',imp:'low',urg:'high'},
+      {id:'r4',label:'生ログの表記ゆれを揃える',state:'empty',imp:'low',urg:'low'},
+      {id:'r5',label:'参加履歴の要確認5件を判断する',state:'empty',imp:'high',urg:'high'},
+      {id:'r6',label:'名簿の整え方を一度相談したいと言われた（仮）',state:'empty',imp:'low',urg:'high',meetian:true,residentId:'res4',due:'10/15（仮）'}
+    ]},
+    {id:'kuromon',name:'黒門カルチャーファクトリー予約',kind:'make',idleDays:16,plots:[
+      {id:'k1',label:'スプシ修正の反映ルールを2つ決める',state:'building',imp:'high',urg:'high'},
+      {id:'k2',label:'利用規約の新しい条文を確認する',state:'empty',imp:'high',urg:'low'},
+      {id:'k3',label:'キャンセル・延期のご案内資料を確認する',state:'empty',imp:'low',urg:'high'},
+      {id:'k4',label:'利用規約の説明を聞きたいと言われた（仮）',state:'empty',imp:'high',urg:'low',meetian:true,residentId:'res5',due:'10/11（仮）'}
+    ]},
+    {id:'backlog',name:'気になっていること（やることメモ）',idleDays:42,plots:[
+      {id:'b1',label:'nohohonの予約システムを納品した',state:'built',imp:'low',urg:'low'},
+      {id:'b2',label:'ミーティアンの活用を考える',state:'building',imp:'high',urg:'low',children:[
+        {id:'b2a',label:'できることを書き出す（仮）',state:'built',imp:'high',urg:'low'},
+        {id:'b2b',label:'優先順位をつける（仮）',state:'empty',imp:'high',urg:'low'},
+        {id:'b2c',label:'ちびぃに提案する（仮）',state:'empty',imp:'low',urg:'low'}
+      ]},
+      {id:'b3',label:'SNS統合受信管理の続きをやる',state:'empty',imp:'low',urg:'high'},
+      {id:'b4',label:'Iさんとの定例MTG頻度見直しに返信する（仮）',state:'empty',imp:'low',urg:'low',meetian:true,residentId:'res1',due:'10/8（仮）'},
+      {id:'b5',label:'名刺交換した人へお礼メッセージを送る（仮）',state:'empty',imp:'high',urg:'high',meetian:true,residentId:'res2',due:'10/20（仮）'},
+      {id:'b6',label:'次回の定例の日程を相談したいと言われた（仮）',state:'empty',imp:'low',urg:'low',meetian:true,residentId:'res6',due:'10/18（仮）'}
+    ]}
+  ];
+  // 完成済みプロジェクト（ちびぃの記録から。人名は伏せる）＋ 街のスケール確認用の（仮）データ
+  blocks.push(
+    {id:'portfolio',name:'ポートフォリオサイト（触れるデモ12本）',kind:'make',completedNote:'2026-09-23に公開',plots:[
+      {id:'pf1',label:'デモ12本を作った',state:'built',imp:'high',urg:'low'},
+      {id:'pf2',label:'showcase.nekonote.helpに公開した',state:'built',imp:'high',urg:'high'},
+      {id:'pf3',label:'動作確認をした',state:'built',imp:'low',urg:'high'}
+    ]},
+    {id:'realme',name:'REALME診断アプリ',kind:'make',completedNote:'2026-09-10に納品完了',plots:[
+      {id:'rm1',label:'診断アプリを納品した',state:'built',imp:'high',urg:'high'},
+      {id:'rm2',label:'使い方の説明をした',state:'built',imp:'low',urg:'low'}
+    ]},
+    {id:'sanzen',name:'産前産後つなぐ大阪 予約管理',kind:'make',completedNote:'実装・テスト・資料送付まで完了',plots:[
+      {id:'sz1',label:'予約システムを実装した',state:'built',imp:'high',urg:'high'},
+      {id:'sz2',label:'資料を送付した',state:'built',imp:'low',urg:'low'}
+    ]},
+    {id:'cflp',name:'クラウドファンディング協業LP',kind:'make',completedNote:'GitHub Pagesに公開済み',plots:[
+      {id:'cl1',label:'LPを作った',state:'built',imp:'high',urg:'low'},
+      {id:'cl2',label:'協業先に送付した',state:'built',imp:'low',urg:'high'}
+    ]}
+  );
+  // （仮）サンプル案件のうち2件は物販寄りの名前に変えてkind:'sell'にする（本番はAIがプロジェクト名とタスクから判断する）
+  const DUMMY_KIND_OVERRIDES={1:{name:'（仮）手づくり雑貨のネット販売',kind:'sell'},2:{name:'（仮）リユース品の店頭販売会',kind:'sell'}};
+  // 完成済みの高層ビルの見本が地図で見えるよう、サンプル案件3だけタスクを6個（すべてstate:'built'）に増やす
+  const DUMMY_PLOT_OVERRIDES={3:[
+    {id:'dm3a',label:'作業を終えた（仮）',state:'built',imp:'low',urg:'high'},
+    {id:'dm3b',label:'確認を終えた（仮）',state:'built',imp:'low',urg:'low'},
+    {id:'dm3c',label:'作業を終えた（仮）',state:'built',imp:'low',urg:'high'},
+    {id:'dm3d',label:'確認を終えた（仮）',state:'built',imp:'low',urg:'low'},
+    {id:'dm3e',label:'作業を終えた（仮）',state:'built',imp:'low',urg:'high'},
+    {id:'dm3f',label:'確認を終えた（仮）',state:'built',imp:'low',urg:'low'}
+  ]};
+  for(let i=1;i<=12;i++){
+    const override=DUMMY_KIND_OVERRIDES[i];
+    const plotOverride=DUMMY_PLOT_OVERRIDES[i];
+    blocks.push({id:'dummy'+i,name:(override?override.name:'（仮）サンプル案件'+i),kind:(override?override.kind:undefined),completedNote:'（仮の完了データ）',plots:plotOverride||[
+      {id:'dm'+i+'a',label:'作業を終えた（仮）',state:'built',imp:(i%2===0?'high':'low'),urg:(i%3===0?'high':'low')},
+      {id:'dm'+i+'b',label:'確認を終えた（仮）',state:'built',imp:'low',urg:'low'}
+    ]});
+  }
+  let lastBuiltKey=null,currentTask=null;
+  // ======== 選択状態（1か所にまとめる。2026-10-04：3つの見方の連動を直すため） ========
+  // null | {kind:'task',bId,pId} | {kind:'building',blockId} | {kind:'resident',residentId}
+  let selection=null;
+
+  // 子タスク（孫を持つことがある）まで探す。孫のidでも見つかる
+  const findPlot=(bId,pId)=>{
+    const block=blocks.find(b=>b.id===bId);
+    if(!block)return {block:undefined,plot:undefined};
+    for(const p of block.plots){
+      if(p.id===pId)return {block,plot:p};
+      if(p.children){
+        const g=p.children.find(c=>c.id===pId);
+        if(g)return {block,plot:g};
+      }
+    }
+    return {block,plot:undefined};
+  };
+  // 個々のタスク（子・孫）のハイライト：そのタスク自体を選んでいるか、そのプロジェクトの建物を選んでいるか
+  function isHL(bId,pId){
+    if(!selection)return false;
+    if(selection.kind==='task')return selection.bId===bId&&selection.pId===pId;
+    if(selection.kind==='building')return selection.blockId===bId;
+    return false;
+  }
+  // 地図の建物のハイライト：その建物自体を選んでいるか、その中のタスクを選んでいるか
+  function isBuildingHL(blockId){
+    if(!selection)return false;
+    if(selection.kind==='building')return selection.blockId===blockId;
+    if(selection.kind==='task')return selection.bId===blockId;
+    return false;
+  }
+  function isResidentHL(residentId){
+    return !!(selection&&selection.kind==='resident'&&selection.residentId===residentId);
+  }
+
+  function markBuilt(bId,pId){
+    const {block,plot}=findPlot(bId,pId);
+    if(!plot||plot.state==='built')return;
+    const wasSmoke=block&&neglectStageOf(block)===3; // 状態を変える前に控える（完成扱いになってからだと火事と判定できない）
+    plot.state='built';
+    lastBuiltKey=bId;
+    resetNeglectIfAny(bId,{wasSmoke});
+    renderAll();
+  }
+
+  // ======== アイソメトリック地図（1プロジェクト＝1区画＝1建物。1インスタンスを再利用） ========
+  const TILE_W=128,TILE_H=64,HALF_W=64,HALF_H=32,BOX_W=144,BOX_H=192,PAD=160;
+  // 絵のファイルごとの地面の補正表（state・種類ではなく絵そのもので持つ）
+  // widthFrac＝地面の幅（絵の幅に対する割合）／centerYFrac＝地面の左右の角の高さ（絵の高さに対する割合）
+  // topFrac＝絵の中で実際に建物が描かれている一番上（絵の高さに対する割合・不透明部分の一番上）。当たり判定の上端に使う
+  // bodyLeft・bodyRight＝絵の中で建物が描かれている左端・右端（絵の幅に対する割合）。当たり判定の左右に使う
+  // （仮）値は絵（384×384）の不透明部分の左右の端・上端から測った。木などが地面からはみ出している絵は少し小さめになる
+  const ISO_IMAGE_FIX_BY_FILE={
+    'done_house.png':     {widthFrac:0.758, centerYFrac:0.572, topFrac:0.227, bodyLeft:0.326, bodyRight:0.695},
+    'done_shop.png':      {widthFrac:0.883, centerYFrac:0.658, topFrac:0.083, bodyLeft:0.172, bodyRight:0.828},
+    'done_office.png':    {widthFrac:0.857, centerYFrac:0.672, topFrac:0.096, bodyLeft:0.273, bodyRight:0.755},
+    'done_tower.png':     {widthFrac:0.688, centerYFrac:0.706, topFrac:0.112, bodyLeft:0.370, bodyRight:0.630},
+    'done_public.png':    {widthFrac:0.938, centerYFrac:0.585, topFrac:0.206, bodyLeft:0.247, bodyRight:0.672},
+    'done_factory.png':   {widthFrac:0.742, centerYFrac:0.600, topFrac:0.180, bodyLeft:0.284, bodyRight:0.729},
+    'done_skyscraper.png':{widthFrac:0.625, centerYFrac:0.771, topFrac:0.049, bodyLeft:0.380, bodyRight:0.617},
+    'lot_empty.png':      {widthFrac:0.867, centerYFrac:0.507, topFrac:0.214, bodyLeft:0.422, bodyRight:0.578},
+    'lot_build.png':      {widthFrac:0.857, centerYFrac:0.544, topFrac:0.156, bodyLeft:0.422, bodyRight:0.641},
+    'bld_half.png':       {widthFrac:0.896, centerYFrac:0.655, topFrac:0.089, bodyLeft:0.229, bodyRight:0.771}
+  };
+  // 建物の種類ごとの区画の広さ（仮・1か所にまとめる）。foot＝絵の表示に使うマス数（1か2）で、区画の当たり判定の大きさにも使う
+  // skyscraper・public＝たて2×よこ2の4マス（絵は2マス分）／house・shop・tower＝1マス／office・factory＝建物1マス＋庭1マスの2マス（絵は1マス分）
+  const BT_FOOT={house:1,shop:1,office:1,tower:1,public:2,factory:1,skyscraper:2};
+  const BT_HAS_GARDEN={office:true,factory:true};
+  const TAG_ZOOM_THRESHOLD=1.3;
+  let panX=0,panY=0,isoScale=0.9,mapNeedsRefit=true,showAllNames=false,meetianOn=false,meetianConnFail=false;
+  // 建物の名前の札（2026-10-05・仮）：押して選んだときだけ2.5秒出て、そのあと薄くなって消える（選んだ状態・光り方・吹き出しは変えない）
+  let tagTimerBlockId=null,tagHideTimer=null;
+  function showNameTagFor(blockId){
+    tagTimerBlockId=blockId;
+    clearTimeout(tagHideTimer);
+    tagHideTimer=setTimeout(()=>{
+      tagTimerBlockId=null;
+      refreshTagVisibility(panelMap);
+    },2500);
+  }
+
+  // 完成までの数え方：いちばん下のタスク（孫があれば孫、無ければ子）で数える
+  function leafTasksOf(block){
+    const leaves=[];
+    block.plots.forEach(p=>{
+      if(p.children&&p.children.length)leaves.push(...p.children);
+      else leaves.push(p);
+    });
+    return leaves;
+  }
+  function isEffectivelyDone(p){
+    if(p.children&&p.children.length)return p.children.every(c=>c.state==='built');
+    return p.state==='built';
+  }
+  function blockStage(block){
+    const leaves=leafTasksOf(block);
+    const total=leaves.length,done=leaves.filter(p=>p.state==='built').length;
+    if(total===0||done===0)return 'empty';
+    if(done>=total)return 'complete';
+    if(done/total>=0.5)return 'built';
+    return 'building';
+  }
+
+  // ======== 建物の放置（2026-10-05・仮：タスクが動いていない日数で見た目を変える） ========
+  // 日数は（仮）。本番は仕様書のタスク管理表N列「更新日時」の、そのプロジェクトの全タスク（子・孫含む）の最大値から出す
+  const NEGLECT_DAYS={weeds:15,crow:25,fire:40};
+  // 0=放置なし／1=雑草＋くすみ／2=上に加えてカラス＋暗さ／3=上に加えて火事（炎＋煙）。完成したプロジェクトは対象外
+  function neglectStageOf(block){
+    if(block._neglectFxLock)return block._neglectFxLock; // 消防車が来るまで見た目だけ火事を保つ（仮）
+    if(blockStage(block)==='complete')return 0;
+    const days=block.idleDays||0;
+    if(days>=NEGLECT_DAYS.fire)return 3;
+    if(days>=NEGLECT_DAYS.crow)return 2;
+    if(days>=NEGLECT_DAYS.weeds)return 1;
+    return 0;
+  }
+  // そのプロジェクトのタスクを動かしたら放置日数を0に戻す。火事（40日以上）だったときだけ消防車の演出を入れる
+  // wasSmokeは呼び出し元が「状態を変える前」に控えた値を渡す（状態を変えた後にneglectStageOfを呼ぶと、完成扱いになって0を返すことがあるため）
+  function resetNeglectIfAny(blockId,opts){
+    const block=blocks.find(b=>b.id===blockId);
+    if(!block||!block.idleDays)return;
+    const wasSmoke=!!(opts&&opts.wasSmoke);
+    block.idleDays=0;
+    if(wasSmoke){
+      block._neglectFxLock=3;
+      // スマホで地図タブ以外にいるときは消防車が見えないので、地図タブへ切り替えて建物を中央に寄せてから演出する（PC・すでに地図タブのときは切り替え不要）
+      if(currentMode==='mobile'&&currentTab!=='map'){
+        currentTab='map';
+        document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab==='map'));
+        mountPanels();
+        requestAnimationFrame(()=>{
+          renderAll();
+          // 地図タブに切り替えて戻ったときは、その建物の区画がしっかり見える倍率にかけ直す
+          // （「最初に開いたときの倍率」のままだとスマホの表示枠では0.35前後と小さく、消防車が見えにくいため・2026-10-05ちびぃ指摘）
+          fitMapToBlockWidth(blockId);
+          mapNeedsRefit=false;
+          applyIsoTransform(panelMap);
+          centerMapOnBlock(blockId);
+          spawnNeglectFireTruck(blockId);
+        });
+      }else{
+        spawnNeglectFireTruck(blockId);
+      }
+    }
+  }
+  // その建物の区画の横幅（TILE_W×マス数）が、地図の表示枠（.iso-viewport）の横幅の45%前後になる倍率にする
+  // （消防車の演出をちびぃに見せるため。既存の拡大・縮小の上限・下限＝zoomByと同じ0.2〜2.5に収める。2026-10-05ちびぃ指摘）
+  function fitMapToBlockWidth(blockId){
+    if(!lastLayout)return;
+    const cell=lastLayout.cellsLogical.find(c=>c.type==='plot'&&c.blockId===blockId);
+    if(!cell)return;
+    const vp=panelMap.querySelector('.iso-viewport');
+    if(!vp)return;
+    const vw=vp.clientWidth||300;
+    const foot=cell.foot||1;
+    isoScale=Math.max(0.2,Math.min((vw*0.45)/(TILE_W*foot),2.5));
+  }
+  // その建物が地図のまん中に来るように、今の倍率のままパン位置だけ動かす（消防車の演出をちびぃに見せるため）
+  function centerMapOnBlock(blockId){
+    if(!lastLayout)return;
+    const cell=lastLayout.cellsLogical.find(c=>c.type==='plot'&&c.blockId===blockId);
+    if(!cell)return;
+    const foot=cell.foot||1;
+    const {x,y}=toPixelForFoot(cell.row,cell.col,lastLayout.totalRows,foot);
+    const cx=x+TILE_W*foot/2,cy=y+TILE_H*foot/2;
+    const vp=panelMap.querySelector('.iso-viewport');
+    if(!vp)return;
+    const vw=vp.clientWidth||300,vh=vp.clientHeight||300;
+    panX=vw/2-cx*isoScale;
+    panY=vh/2-cy*isoScale;
+    applyIsoTransform(panelMap);
+  }
+  function spawnNeglectFireTruck(blockId){
+    const target=blocks.find(b=>b.id===blockId);
+    if(!target||!lastLayout)return;
+    const cell=lastLayout.cellsLogical.find(c=>c.type==='plot'&&c.blockId===blockId);
+    if(!cell)return;
+    // 消防車は区画に入らず、区画が占める全マスのどれかに接する道路のマスで止まる（2026-10-05・仮：建物の上に乗って炎と重なって見えるのを防ぐ）
+    const footCells=plotOccupiedCells(cell);
+    const stopCell=nearestRoadCellFromCells(footCells,buildTypeMap())||cell;
+    // holdMsは消防車が止まっている長さ。この間に水をかけて消す演出（sprayWaterOnFire）を見せてから走り去る
+    spawnTruck(panelMap,cell.row,cell.col,()=>{
+      sprayWaterOnFire(target,cell,stopCell);
+    },{emoji:'🚒',img:'vehicle_firetruck.png',imgBack:'vehicle_firetruck_back.png',holdMs:1600,footCells,stopAtRoad:true});
+  }
+  // 消防車が火事の前（道路のマス＝stopCell）で止まっている間に水しぶきを飛ばし、炎→（消えたあと）煙の順に消して元の見た目に戻す（2026-10-05・仮）
+  function sprayWaterOnFire(target,cell,stopCell){
+    const finish=()=>{delete target._neglectFxLock;delete target._fireDousing;delete target._fireQuenched;renderAll();};
+    const stage=panelMap.querySelector('.iso-stage');
+    if(!stage||!lastLayout){finish();return;}
+    const foot=cell.foot||1;
+    // 建物・道路・車と同じステージの座標系（toPixelの値そのまま。panX/panY/isoScaleは掛けない＝2026-10-05・仮）
+    const {x,y}=toPixel(cell.row,cell.col,lastLayout.totalRows);
+    const fireLeft=x+TILE_W/2,fireTopBase=y+TILE_H*0.55;
+    const fireTop=fireTopBase-70*foot;
+    // 消防車が実際に止まっている位置（spawnTruckのstopAtRoadと同じ式。区画ではなく道路のマス）から水しぶきを飛ばす
+    const stopXY=toPixel((stopCell||cell).row,(stopCell||cell).col,lastLayout.totalRows);
+    const truckLeft=stopXY.x+TILE_W/2,truckTop=stopXY.y+TILE_H*0.55;
+    const spray=document.createElement('div');
+    spray.className='iso-water-spray';
+    spray.style.left=truckLeft+'px';spray.style.top=truckTop+'px';
+    spray.style.zIndex=((cell.row+cell.col)*10+8);
+    spray.style.setProperty('--water-dx',(fireLeft-truckLeft)+'px');
+    spray.style.setProperty('--water-dy',(fireTop-truckTop)+'px');
+    spray.innerHTML='<span class="iso-water-drop"></span>'.repeat(6);
+    stage.appendChild(spray);
+    setTimeout(()=>spray.remove(),900);
+    target._fireDousing=true; // 水をかけ始めたら炎を縮めて消す（iso-fire-wrapのis-dousingアニメーション）
+    renderAll();
+    setTimeout(()=>{target._fireQuenched=true;renderAll();},850); // 炎が消えたら煙も薄くする（iso-smokeのis-outアニメーション）
+    setTimeout(finish,1550); // 消防車が走り去る直前に元の見た目へ戻す
+  }
+
+  // ======== 街区（道路で四角く囲まれたかたまり）を作る ========
+  // 帯（横一列）を上から積んでいき、各帯の中に街区を横に並べる。帯の高さ・街区の幅は2か3（仮：位置のハッシュ値で決める）
+  // ＝2×2・2×3・3×3などが混ざる。建物がちょうど収まった時点で帯を足すのをやめる＝空の街区を作らない
+  function buildCityPlan(projectCount){
+    const strips=[];
+    let capacity=0,stripIdx=0,guard=0;
+    while(capacity<projectCount&&guard<20){
+      const h=hash01('striph'+stripIdx)<0.5?2:3;
+      const blockWidths=[];
+      let stripCap=0,wIdx=0;
+      while(stripCap<(projectCount-capacity)&&blockWidths.length<4){
+        const w=hash01('stripw'+stripIdx+'_'+wIdx)<0.5?2:3;
+        blockWidths.push(w);
+        stripCap+=w*h;
+        wIdx++;
+      }
+      strips.push({height:h,blockWidths});
+      capacity+=stripCap;
+      stripIdx++;guard++;
+    }
+    return strips;
+  }
+  function computeLayout(){
+    // 街区を縦横の格子に並べる（全体が四角になるので、道路だけの広い空き地ができない）
+    // 区画は建物の種類によって1・2・4マスとバラバラなので、街区の数・広さは必要なマス数の合計で足りるかを見る
+    const plotSpecs=blocks.map(block=>{
+      const btype=block._btype||(block._btype=assignBuildingType(block));
+      const foot=BT_FOOT[btype]||1;
+      const hasGarden=!!BT_HAS_GARDEN[btype];
+      const masu=foot===2?4:(hasGarden?2:1);
+      return {block,btype,foot,hasGarden,masu};
+    });
+    const masuNeeded=plotSpecs.reduce((s,p)=>s+p.masu,0);
+    const blockCount=Math.ceil(masuNeeded/5)+1;
+    const C=Math.max(2,Math.ceil(Math.sqrt(blockCount)));
+    const R=Math.max(2,Math.ceil(blockCount/C));
+    const colW=[],rowH=[];
+    for(let c=0;c<C;c++)colW.push(hash01('colw'+c)<0.5?2:3);
+    for(let r=0;r<R;r++)rowH.push(hash01('rowh'+r)<0.5?2:3);
+    const cap=()=>{let s=0;for(let r=0;r<R;r++)for(let c=0;c<C;c++)s+=rowH[r]*colW[c];return s-rowH[R-1]*colW[Math.floor(C/2)];};
+    let g2=0;while(cap()<masuNeeded&&g2<40){const i=g2%(C+R);if(i<C)colW[i]=3;else rowH[i-C]=3;g2++;}
+    const colStart=[],rowStart=[];
+    {let x=1;for(let c=0;c<C;c++){colStart.push(x);x+=colW[c]+1;}}
+    {let y=1;for(let r=0;r<R;r++){rowStart.push(y);y+=rowH[r]+1;}}
+    const totalCols=colStart[C-1]+colW[C-1]+1;
+    const totalRows=rowStart[R-1]+rowH[R-1]+1;
+    // 公園は最後の行のまん中の街区。それ以外は建物の街区（2次元の格子のまま持ち、2×2・2連のマスを探せるようにする）
+    const parkR=R-1,parkC=Math.floor(C/2);
+    const buildingBlocks=[];
+    const parkCells=[];
+    for(let r=0;r<R;r++)for(let c=0;c<C;c++){
+      const w=colW[c],h=rowH[r];
+      if(r===parkR&&c===parkC){
+        for(let ly=0;ly<h;ly++)for(let lx=0;lx<w;lx++)parkCells.push({row:rowStart[r]+ly,col:colStart[c]+lx});
+        continue;
+      }
+      const grid=[];
+      for(let ly=0;ly<h;ly++){
+        const rowArr=[];
+        for(let lx=0;lx<w;lx++)rowArr.push({row:rowStart[r]+ly,col:colStart[c]+lx,used:false});
+        grid.push(rowArr);
+      }
+      buildingBlocks.push({grid,width:w,height:h});
+    }
+    const cellsLogical=[];
+    const interiorSet=new Set();
+    const markUsed=cell=>interiorSet.add(cell.row+'_'+cell.col);
+    // 街区の中でその区画が入る最初の空き位置を探す
+    function findSlot2x2(bb){
+      for(let ly=0;ly+1<bb.height;ly++)for(let lx=0;lx+1<bb.width;lx++){
+        const a=bb.grid[ly][lx],b2=bb.grid[ly][lx+1],c2=bb.grid[ly+1][lx],d2=bb.grid[ly+1][lx+1];
+        if(!a.used&&!b2.used&&!c2.used&&!d2.used){a.used=b2.used=c2.used=d2.used=true;return {row:a.row,col:a.col};}
+      }
+      return null;
+    }
+    function findSlotPair(bb,vertical){
+      if(vertical){
+        for(let ly=0;ly+1<bb.height;ly++)for(let lx=0;lx<bb.width;lx++){
+          const a=bb.grid[ly][lx],b2=bb.grid[ly+1][lx];
+          if(!a.used&&!b2.used){a.used=b2.used=true;return {building:{row:a.row,col:a.col},garden:{row:b2.row,col:b2.col}};}
+        }
+      }else{
+        for(let ly=0;ly<bb.height;ly++)for(let lx=0;lx+1<bb.width;lx++){
+          const a=bb.grid[ly][lx],b2=bb.grid[ly][lx+1];
+          if(!a.used&&!b2.used){a.used=b2.used=true;return {building:{row:a.row,col:a.col},garden:{row:b2.row,col:b2.col}};}
+        }
+      }
+      return null;
+    }
+    function findSlot1x1(bb){
+      for(let ly=0;ly<bb.height;ly++)for(let lx=0;lx<bb.width;lx++){
+        const a=bb.grid[ly][lx];
+        if(!a.used){a.used=true;return {row:a.row,col:a.col};}
+      }
+      return null;
+    }
+    // 街区を順に回りながら、今置きたい区画が入る最初の空き位置に置く（入る街区が見つかるまで次の街区を試す）
+    function placeRoundRobin(queue,placeFn){
+      let idx=0,guard=0;
+      while(idx<queue.length&&guard<10000){
+        let placedAny=false;
+        for(const bb of buildingBlocks){
+          if(idx>=queue.length)break;
+          if(placeFn(bb,queue[idx])){idx++;placedAny=true;}
+        }
+        guard++;
+        if(!placedAny)break;
+      }
+      return queue.slice(idx);
+    }
+    // ①4マス（skyscraper・public）→②2マス（office・factory、庭つき）→③1マスの順に先へ置く
+    const singles=plotSpecs.filter(p=>p.masu===1);
+    const bigs=plotSpecs.filter(p=>p.masu===4);
+    const gardens=plotSpecs.filter(p=>p.masu===2);
+    const leftoverBigs=placeRoundRobin(bigs,(bb,spec)=>{
+      const pos=findSlot2x2(bb);
+      if(!pos)return false;
+      markUsed({row:pos.row,col:pos.col});markUsed({row:pos.row,col:pos.col+1});
+      markUsed({row:pos.row+1,col:pos.col});markUsed({row:pos.row+1,col:pos.col+1});
+      cellsLogical.push({row:pos.row,col:pos.col,type:'plot',blockId:spec.block.id,foot:2});
+      return true;
+    });
+    const leftoverGardens=placeRoundRobin(gardens,(bb,spec)=>{
+      const vertical=hash01('gardenorient_'+spec.block.id)<0.5;
+      const pos=findSlotPair(bb,vertical);
+      if(!pos)return false;
+      markUsed(pos.building);markUsed(pos.garden);
+      cellsLogical.push({row:pos.building.row,col:pos.building.col,type:'plot',blockId:spec.block.id,foot:1});
+      const deco=hash01('gardendeco_'+spec.block.id)<0.5?'trees':'park';
+      cellsLogical.push({row:pos.garden.row,col:pos.garden.col,type:'plotgarden',deco});
+      return true;
+    });
+    // どの街区にも入らなかった大きい区画・庭つき区画は、1マスに縮めて③に回す（建物が置かれないことは起こさない）
+    const allSingles=singles.concat(leftoverBigs,leftoverGardens);
+    placeRoundRobin(allSingles,(bb,spec)=>{
+      const pos=findSlot1x1(bb);
+      if(!pos)return false;
+      markUsed(pos);
+      cellsLogical.push({row:pos.row,col:pos.col,type:'plot',blockId:spec.block.id,foot:1});
+      return true;
+    });
+    // 街区に残ったマス：街区の端に1つだけ公園か木立を置くことがあり、残りは何も置かない（芝の空き地のまま）
+    buildingBlocks.forEach((bb,bi)=>{
+      const leftovers=[];
+      for(let ly=0;ly<bb.height;ly++)for(let lx=0;lx<bb.width;lx++)if(!bb.grid[ly][lx].used)leftovers.push(bb.grid[ly][lx]);
+      leftovers.forEach((cell,li)=>{
+        markUsed(cell);
+        const deco=(li===0&&hash01('decoblock'+bi)<0.6)?(hash01('decokind'+bi)<0.5?'park':'trees'):'plain';
+        cellsLogical.push({row:cell.row,col:cell.col,type:'fillcell',deco});
+      });
+    });
+    // 公園の街区は、公園の絵1枚を街区いっぱいに置く（マスごとに小さく並べると、つなぎ目でまだらに見えるため）
+    parkCells.forEach(cell=>markUsed(cell));
+    cellsLogical.push({row:rowStart[parkR]+(rowH[parkR]-1)/2,col:colStart[parkC]+(colW[parkC]-1)/2,type:'bigpark',size:Math.min(rowH[parkR],colW[parkC])});
+    // 残りは全部つながった道路（街区を四角く囲む網）になる
+    for(let r=0;r<totalRows;r++)for(let c=0;c<totalCols;c++)if(!interiorSet.has(r+'_'+c))cellsLogical.push({row:r,col:c,type:'road'});
+    return {cellsLogical,totalCols,totalRows};
+  }
+  function toPixel(row,col,totalRows){
+    const offsetX=(totalRows-1)*HALF_W;
+    return {x:(col-row)*HALF_W+offsetX+PAD,y:(row+col)*HALF_H+PAD};
+  }
+  // 区画の広さ（foot＝1か2）に応じて、地面のひし形の基準位置を区画のまん中寄りにずらす（foot2は2×2の区画なので左へ半マス分）
+  function toPixelForFoot(row,col,totalRows,foot){
+    const base=toPixel(row,col,totalRows);
+    if(foot<=1)return base;
+    return {x:base.x-(foot-1)*HALF_W,y:base.y};
+  }
+  // ======== 道路の歩道・縁石（2026-10-05：隣が道路でない辺にだけ帯を付ける） ========
+  // ひし形（128×64）の4頂点。T=上,R=右,B=下,L=左
+  const ISO_DIAMOND_V={T:[64,0],R:[128,32],B:[64,64],L:[0,32]};
+  // 各辺がどの隣のマスと接しているか（dRow,dCol）＝computeLayoutのtoPixelの進み方と対応
+  // insetV＝内側の点をずらす向き。辺に直角ではなく、隣り合う辺と同じ向き（＝頂点から見てもう片方の頂点への方向）にする
+  // （直角にずらすと、ひし形の外にはみ出してclip-pathで角が欠けるため。2026-10-05修正）
+  const ISO_ROAD_EDGES=[
+    {from:'T',to:'R',insetV:[-64,32],dRow:-1,dCol:0},
+    {from:'R',to:'B',insetV:[-64,-32],dRow:0,dCol:1},
+    {from:'B',to:'L',insetV:[64,-32],dRow:1,dCol:0},
+    {from:'L',to:'T',insetV:[64,32],dRow:0,dCol:-1}
+  ];
+  // 頂点ごとの交差点の内側の角（斜め隣が道路でなく、頂点をはさむ2辺の隣がどちらも道路のときに歩道を回り込ませる）
+  // dA・dBはその頂点をはさむ2辺の隣マスへの向き、diagはその頂点の斜め隣マスへの向き
+  const ISO_CORNERS=[
+    {v:'T',adjA:'R',adjB:'L',dA:[-1,0],dB:[0,-1],diag:[-1,-1]},
+    {v:'R',adjA:'B',adjB:'T',dA:[0,1], dB:[-1,0],diag:[-1,1]},
+    {v:'B',adjA:'L',adjB:'R',dA:[1,0], dB:[0,1], diag:[1,1]},
+    {v:'L',adjA:'T',adjB:'B',dA:[0,-1],dB:[1,0], diag:[1,-1]}
+  ];
+  const SIDEWALK_FRAC=0.2,CURB_FRAC=0.045; // 歩道の深さ・縁石の太さ（隣り合う辺の長さに対する割合）
+  // 隣が道路（roadSet）でない辺にだけ、歩道の帯＋縁石の線＋街区側の明るい線を描く
+  // 帯はP1,P2,P2+f×insetV,P1+f×insetVの平行四辺形＝隣り合う辺と同じ向きに収まるので、隣の道路マスの帯とすき間なくつながる
+  function roadWalkMarkup(roadSet,row,col){
+    let out='';
+    ISO_ROAD_EDGES.forEach(e=>{
+      const nr=row+e.dRow,nc=col+e.dCol;
+      if(roadSet.has(nr+'_'+nc))return;
+      const p1=ISO_DIAMOND_V[e.from],p2=ISO_DIAMOND_V[e.to];
+      const at=(p,f)=>[(p[0]+e.insetV[0]*f).toFixed(1),(p[1]+e.insetV[1]*f).toFixed(1)];
+      const o1=at(p1,0),o2=at(p2,0),i1=at(p1,SIDEWALK_FRAC),i2=at(p2,SIDEWALK_FRAC);
+      const c1=at(p1,SIDEWALK_FRAC-CURB_FRAC),c2=at(p2,SIDEWALK_FRAC-CURB_FRAC);
+      out+=`<polygon points="${o1.join(',')} ${o2.join(',')} ${i2.join(',')} ${i1.join(',')}" fill="var(--map-sidewalk)"/>`;
+      out+=`<polygon points="${c1.join(',')} ${c2.join(',')} ${i2.join(',')} ${i1.join(',')}" fill="var(--map-curb)"/>`;
+      out+=`<polyline points="${o1.join(',')} ${o2.join(',')}" stroke="var(--map-sidewalk-edge)" stroke-width="1.5" fill="none" opacity="0.6"/>`;
+    });
+    return out;
+  }
+  // 交差点の内側の角：斜め隣が道路でなく、頂点をはさむ2辺の隣がどちらも道路のときだけ、頂点に小さなひし形の歩道を足して回り込ませる
+  function roadCornerMarkup(roadSet,row,col){
+    let out='';
+    ISO_CORNERS.forEach(c=>{
+      const diagKey=(row+c.diag[0])+'_'+(col+c.diag[1]);
+      if(roadSet.has(diagKey))return;
+      const aKey=(row+c.dA[0])+'_'+(col+c.dA[1]),bKey=(row+c.dB[0])+'_'+(col+c.dB[1]);
+      if(!roadSet.has(aKey)||!roadSet.has(bKey))return;
+      const P=ISO_DIAMOND_V[c.v],VA=ISO_DIAMOND_V[c.adjA],VB=ISO_DIAMOND_V[c.adjB];
+      const vA=[VA[0]-P[0],VA[1]-P[1]],vB=[VB[0]-P[0],VB[1]-P[1]];
+      const p0=P;
+      const p1=[P[0]+vA[0]*SIDEWALK_FRAC,P[1]+vA[1]*SIDEWALK_FRAC];
+      const p2=[p1[0]+vB[0]*SIDEWALK_FRAC,p1[1]+vB[1]*SIDEWALK_FRAC];
+      const p3=[P[0]+vB[0]*SIDEWALK_FRAC,P[1]+vB[1]*SIDEWALK_FRAC];
+      const pts=[p0,p1,p2,p3].map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+      out+=`<polygon points="${pts}" fill="var(--map-sidewalk)"/>`;
+    });
+    return out;
+  }
+  function iconOf(state,btype){
+    if(state==='building')return '🚧';
+    if(state==='built')return '🧱';
+    if(state==='complete')return BT_ICONS[btype]||'🏠';
+    return '';
+  }
+  function imgOf(state,btype){
+    if(state==='complete')return 'done_'+btype+'.png';
+    return {empty:'lot_empty.png',building:'lot_build.png',built:'bld_half.png'}[state];
+  }
+
+  let lastLayout=null;
+  function renderMapInto(root){
+    const layout=computeLayout();lastLayout=layout;
+    const stage=root.querySelector('.iso-stage');
+    const stageW=(layout.totalCols-1+layout.totalRows-1)*HALF_W+TILE_W+PAD*2;
+    const stageH=(layout.totalCols-1+layout.totalRows-1)*HALF_H+TILE_H+PAD*2;
+    stage.style.width=stageW+'px';stage.style.height=stageH+'px';
+    // 消防車・工事の車・水しぶきはステージの中に居続ける（2026-10-05・仮：建物・道路と同じ座標系で重なり順を出すため）。
+    // stage.innerHTML=''で消えてしまうので、作り直す前に取っておいて最後に戻す（走っている途中で選択操作などによりrenderAllが呼ばれても消えない）
+    const keepMovingEls=Array.from(stage.children).filter(el=>el.classList.contains('iso-truck')||el.classList.contains('iso-water-spray'));
+    stage.innerHTML='';
+    // Meetianとつないだ場合（仮）：住民を置く場所を、街区の中の空いたマスから等間隔で選ぶ
+    const fillCells=layout.cellsLogical.filter(c=>c.type==='fillcell');
+    const residentSlotMap=new Map();
+    if(meetianOn&&!meetianConnFail&&fillCells.length){
+      const n=RESIDENTS.length;
+      const step=Math.max(1,Math.floor(fillCells.length/n));
+      for(let i=0;i<n;i++){
+        const idx=Math.min(fillCells.length-1,i*step+Math.floor(step/2));
+        const c=fillCells[idx];
+        residentSlotMap.set(c.row+'_'+c.col,RESIDENTS[i]);
+      }
+    }
+    // 道路の歩道・縁石を描くために、道路マスの集合を先に作っておく（隣が道路かどうかの判定に使う）
+    const roadSet=new Set(layout.cellsLogical.filter(c=>c.type==='road').map(c=>c.row+'_'+c.col));
+    // 描く順番：大きい区画（foot2＝4マス）は区画のまん中（row+0.5,col+0.5）で比べ、手前のものが後から描かれるようにする
+    const zKey=cell=>cell.type==='plot'&&cell.foot===2?(cell.row+cell.col+1):(cell.row+cell.col);
+    const sorted=[...layout.cellsLogical].sort((a,b)=>zKey(a)-zKey(b));
+    sorted.forEach(cell=>{
+      if(cell.type==='plot'){
+        const foot=cell.foot||1;
+        const {x,y}=toPixelForFoot(cell.row,cell.col,layout.totalRows,foot);
+        const block=blocks.find(b=>b.id===cell.blockId);
+        const visualState=blockStage(block);
+        const btype=block._btype||(block._btype=assignBuildingType(block));
+        const tileW=TILE_W*foot,tileH=TILE_H*foot,boxW=tileW+16,boxH=tileH+128;
+        const tile=document.createElement('button');
+        tile.type='button';
+        tile.className='iso-tile'+(isBuildingHL(block.id)?' is-selected':'');
+        tile.style.left=(x-(boxW-tileW)/2)+'px';tile.style.top=(y-(boxH-tileH))+'px';
+        tile.style.width=boxW+'px';tile.style.height=boxH+'px';
+        tile.style.zIndex=zKey(cell)*10; // 重なり順（2026-10-05・仮：車のz-indexと比べられるようにする）
+        tile.dataset.block=block.id;
+        const hit=document.createElement('span');
+        hit.className='iso-tile-hit'+(isBuildingHL(block.id)?' is-hl':'');
+        hit.style.width=tileW+'px';hit.style.height=tileH+'px';
+        tile.appendChild(hit);
+        const inner=document.createElement('div');
+        inner.className='iso-tile-inner'+(block.id===lastBuiltKey?' iso-tile-justbuilt':'');
+        const iconChar=iconOf(visualState,btype);
+        const imgFile=imgOf(visualState,btype);
+        const fix=ISO_IMAGE_FIX_BY_FILE[imgFile]||{centerYFrac:0.5,widthFrac:0.8,topFrac:0.15,bodyLeft:0.25,bodyRight:0.75};
+        // 地面の幅＝区画の幅（TILE_W）×マス数（foot）×0.96。絵ごとの補正（widthFrac）で割って表示サイズにする
+        const spriteSize=(TILE_W*foot*0.96)/fix.widthFrac;
+        const spriteLeft=boxW/2-spriteSize/2;
+        const spriteTop=(boxH-tileH/2)-spriteSize*fix.centerYFrac;
+        // 建物の絵の部分も押せるように、絵の中で実際に建物が描かれている一番上（topFrac）から
+        // 地面のひし形の上まで当たり判定を伸ばす。箱（区画の高さ）より上にはみ出してもよい（topがマイナスになることがある）
+        // 左右も絵の中で建物が描かれている横幅（bodyLeft・bodyRight）に合わせる（地面のひし形いっぱいにはしない）
+        // ／下端は今のまま＝区画の上端boxH-tileH
+        const bodyHitTop=spriteTop+spriteSize*fix.topFrac;
+        const bodyHitHeight=Math.max(0,(boxH-tileH)-bodyHitTop);
+        const bodyHitLeft=spriteLeft+spriteSize*fix.bodyLeft;
+        const bodyHitWidth=spriteSize*(fix.bodyRight-fix.bodyLeft);
+        const fallbackStyle=visualState==='complete'?` style="background:${BT_COLORS[btype]};border-color:${BT_COLORS[btype]}"`:'';
+        inner.innerHTML=`<img src="モック素材_20261004/${imgFile}" alt="" style="width:${spriteSize}px;height:${spriteSize}px;left:${spriteLeft}px;top:${spriteTop}px" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="iso-fallback" style="display:none">${iconChar?`<span class="iso-fallback-icon">${iconChar}</span>`:''}<span class="iso-fallback-diamond state-${visualState}"${fallbackStyle}></span></div>`;
+        tile.appendChild(inner);
+        if(bodyHitHeight>0&&bodyHitWidth>0){
+          const bodyHit=document.createElement('span');
+          bodyHit.className='iso-tile-body-hit';
+          bodyHit.style.left=bodyHitLeft+'px';
+          bodyHit.style.width=bodyHitWidth+'px';
+          bodyHit.style.top=bodyHitTop+'px';
+          bodyHit.style.height=bodyHitHeight+'px';
+          tile.appendChild(bodyHit);
+        }
+        // 放置（2026-10-05・仮）：押しても何も起きない飾り（当たり判定の上に重ねるがpointer-events:noneなので建物を押す動きは変わらない）
+        const neglectLv=neglectStageOf(block);
+        if(neglectLv>=1){
+          tile.classList.add('iso-neglect-'+neglectLv);
+          let neglectHtml='';
+          const wSize=tileW*0.46,wLeft=boxW/2-wSize/2,wTop=boxH-tileH*0.82;
+          neglectHtml+=`<div class="iso-neglect-weeds-wrap" style="left:${wLeft}px;top:${wTop}px;width:${wSize}px;height:${(wSize*0.7).toFixed(1)}px"><img class="iso-neglect-weeds-img" src="モック素材_20261004/overlay_weeds.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="iso-neglect-fallback">🌿🌿🌿</span></div>`;
+          if(neglectLv>=2){
+            const cSize=Math.max(20,tileW*0.22),cLeft=bodyHitLeft+bodyHitWidth*0.62,cTop=bodyHitTop-cSize*0.5;
+            neglectHtml+=`<div class="iso-neglect-crow-wrap" style="left:${cLeft}px;top:${cTop}px;width:${cSize}px;height:${cSize}px"><img class="iso-neglect-crow-img" src="モック素材_20261004/overlay_crow.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="iso-neglect-fallback">🐦</span></div>`;
+          }
+          if(neglectLv>=3){
+            // 火事（2026-10-05・仮：40日以上）。炎の大きさ・位置は区画の大きさ（foot）と地面のひし形の中心で決める
+            // ＝絵の当たり判定（bodyHit・topFrac）は使わない。細いクレーンの絵（建設中）でも建物の上に大きく出るようにするため（2026-10-05ちびぃ指摘で直した）
+            // 消防車が水をかけている間はblock._fireDousingで炎を縮めて消し（is-dousing）、消えたあとはblock._fireQuenchedで煙も薄くする（is-out）
+            const groundCenterX=boxW/2,groundCenterY=128+tileH/2; // 地面のひし形（.iso-tile-hit）の中心＝tile内のローカル座標
+            const diamondH=TILE_H*foot;
+            // 下の辺は地面の中心からひし形の高さ×0.1ほど手前（下）に置く（斜め地図では「上」は「奥」になるため、中心より上に置くと奥に浮いて見えた＝2026-10-05ちびぃ指摘で直した）
+            const fireBottomY=groundCenterY+diamondH*0.1;
+            const fireImgBottomFrac=0.87; // overlay_fire.pngは256×256の正方形で、不透明部分（炎）の下端は絵の高さの約87%の位置
+            const fireW=TILE_W*foot*0.55,fireH=fireW;
+            const fire1Left=groundCenterX-fireW*0.56,fire1Top=fireBottomY-fireH*fireImgBottomFrac;
+            const fire2W=fireW*0.8,fire2H=fire2W;
+            const fire2Left=groundCenterX-fire2W*0.56+fireW*0.32,fire2Top=fireBottomY-fire2H*fireImgBottomFrac;
+            // 煙（2026-10-05・仮：丸い玉の代わりにoverlay_smoke.pngを使う。絵が読めないときだけ丸い玉の煙を出す）
+            // 煙の絵の下の端を炎（fire1）の上から3割あたりに重ね、炎の後ろから立ちのぼって見えるようにする。横幅は炎（fire1）の横幅と同じくらい
+            const smokeImgBottomFrac=0.96; // overlay_smoke.pngは256×382で、不透明部分（煙）の下端は絵の高さの約96%の位置
+            const smokeW=fireW,smokeH=smokeW*382/256;
+            const smokeOverlapY=fire1Top+fireH*0.3;
+            const smokeLeft=groundCenterX-smokeW/2,smokeTop=smokeOverlapY-smokeH*smokeImgBottomFrac;
+            const outClass=block._fireQuenched?' is-out':'';
+            const smokeSize=22*foot,smokeRise=85*foot; // 絵が読めないときの丸い玉フォールバック用（今までと同じ計算）
+            const fallbackPuffs='<span class="iso-smoke-puff iso-smoke-puff-fire"></span>'.repeat(5);
+            // 重なり順：煙を先にDOMへ入れてから炎を入れる（煙の絵の濃い下側が炎を隠していたため、炎が手前になるよう順番を直した＝Codexの指摘で2026-10-05対応）
+            ['iso-firesmoke-a','iso-firesmoke-b'].forEach(cls=>{
+              neglectHtml+=`<div class="iso-firesmoke-wrap ${cls}${outClass}" style="left:${smokeLeft}px;top:${smokeTop}px;width:${smokeW}px;height:${smokeH}px"><img class="iso-firesmoke-img" src="モック素材_20261004/overlay_smoke.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><div class="iso-smoke${outClass}" style="display:none;left:50%;top:55%;--smoke-size:${smokeSize}px;--smoke-rise:-${smokeRise}px">${fallbackPuffs}</div></div>`;
+            });
+            if(!block._fireQuenched){
+              const dousingClass=block._fireDousing?' is-dousing':'';
+              neglectHtml+=`<div class="iso-fire-wrap iso-fire-a${dousingClass}" style="left:${fire1Left}px;top:${fire1Top}px;width:${fireW}px;height:${fireH}px"><img class="iso-fire-img" src="モック素材_20261004/overlay_fire.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="iso-fire-fallback">🔥</span></div>`;
+              neglectHtml+=`<div class="iso-fire-wrap iso-fire-b${dousingClass}" style="left:${fire2Left}px;top:${fire2Top}px;width:${fire2W}px;height:${fire2H}px"><img class="iso-fire-img" src="モック素材_20261004/overlay_fire.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="iso-fire-fallback">🔥</span></div>`;
+            }
+          }
+          tile.insertAdjacentHTML('beforeend',neglectHtml);
+        }
+        stage.appendChild(tile);
+        const tag=document.createElement('div');tag.className='iso-block-tag';tag.dataset.block=block.id;
+        tag.style.left=(x+tileW/2)+'px';tag.style.top=(y-4)+'px';tag.textContent=block.name;
+        stage.appendChild(tag);
+        return;
+      }
+      const {x,y}=toPixel(cell.row,cell.col,layout.totalRows);
+      if(cell.type==='road'){
+        const div=document.createElement('div');div.className='iso-road';
+        div.style.left=x+'px';div.style.top=y+'px';
+        div.style.zIndex=zKey(cell)*10;
+        // アスファルトのざらつき（ノイズ）をステージ座標で揃えて、マスの境目で模様がズレないようにする
+        div.style.backgroundPosition=(-x)+'px '+(-y)+'px';
+        const walk=roadWalkMarkup(roadSet,cell.row,cell.col)+roadCornerMarkup(roadSet,cell.row,cell.col);
+        if(walk)div.innerHTML=`<svg class="iso-road-walk" viewBox="0 0 128 64">${walk}</svg>`;
+        stage.appendChild(div);
+        return;
+      }
+      if(cell.type==='bigpark'){
+        const pw=TILE_W*cell.size*1.0;
+        const pk=document.createElement('div');pk.className='iso-bigpark';
+        pk.style.left=(x+TILE_W/2)+'px';pk.style.top=(y+TILE_H/2)+'px';pk.style.width=pw+'px';pk.style.height=pw+'px';
+        pk.style.zIndex=zKey(cell)*10;
+        pk.innerHTML=`<img src="モック素材_20261004/deco_park.png" alt="" onerror="this.style.display='none'">`;
+        stage.appendChild(pk);
+        return;
+      }
+      if(cell.type==='plotgarden'){
+        // factory・office区画の庭：押しても何も起きない（.iso-decoはpointer-events:none）。住民（Meetian）はここには置かない
+        const dd=document.createElement('div');dd.className='iso-deco';
+        dd.style.left=x+'px';dd.style.top=y+'px';
+        dd.style.zIndex=zKey(cell)*10;
+        const file=cell.deco==='park'?'deco_park.png':'deco_trees.png';
+        const icon=cell.deco==='park'?'🌷':'🌳';
+        dd.innerHTML=`<div class="iso-deco-inner"><img class="iso-deco-img" src="モック素材_20261004/${file}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="iso-deco-fallback" style="display:none">${icon}</div></div>`;
+        stage.appendChild(dd);
+        return;
+      }
+      if(cell.type==='fillcell'){
+        const resident=residentSlotMap.get(cell.row+'_'+cell.col);
+        if(resident){
+          const el=document.createElement('div');
+          el.className='iso-resident'+(resident.daysInactive>=7?' is-dark':'')+(isResidentHL(resident.id)?' is-selected':'');
+          el.style.left=(x+TILE_W/2)+'px';el.style.top=(y+TILE_H*0.78)+'px';
+          el.style.zIndex=zKey(cell)*10;
+          el.dataset.resident=resident.id;
+          const houseFile=resident.daysInactive>=7?'res_house_off.png':'res_house_on.png';
+          el.innerHTML=`<img class="iso-resident-house" src="モック素材_20261004/${houseFile}" alt=""><span class="iso-resident-figure">🧍</span><span class="iso-resident-initials">${resident.initials}</span>`;
+          stage.appendChild(el);
+          return;
+        }
+        const deco=cell.deco;
+        if(deco==='plain')return;
+        const dd=document.createElement('div');dd.className='iso-deco';
+        dd.style.left=x+'px';dd.style.top=y+'px';
+        dd.style.zIndex=zKey(cell)*10;
+        const file=deco==='park'?'deco_park.png':'deco_trees.png';
+        const icon=deco==='park'?'🌷':'🌳';
+        dd.innerHTML=`<div class="iso-deco-inner"><img class="iso-deco-img" src="モック素材_20261004/${file}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="iso-deco-fallback" style="display:none">${icon}</div></div>`;
+        stage.appendChild(dd);
+        return;
+      }
+    });
+    // 取っておいた消防車・工事の車・水しぶきをステージに戻す（z-indexは走っている間ずっと自分で持っているのでそのまま）
+    keepMovingEls.forEach(el=>stage.appendChild(el));
+    applyIsoTransform(root);
+  }
+  function refreshTagVisibility(root){
+    root.querySelectorAll('.iso-block-tag').forEach(tag=>{
+      const bid=tag.dataset.block;
+      const visible=showAllNames||isoScale>TAG_ZOOM_THRESHOLD||tagTimerBlockId===bid;
+      tag.classList.toggle('is-visible',visible);
+    });
+  }
+  function applyIsoTransform(root){
+    const stage=root.querySelector('.iso-stage');
+    if(!stage)return;
+    stage.style.transform='translate('+panX+'px,'+panY+'px) scale('+isoScale+')';
+    stage.style.transformOrigin='0 0';
+    stage.style.setProperty('--inv',(1/isoScale).toFixed(3));
+    refreshTagVisibility(root);
+  }
+  function fitMapToViewport(root,whole){
+    // 最初は「街全体が収まる倍率」の2倍で、街のまん中を映す（全体だと人と家が小さすぎて見えないため。10/4ちびぃ）
+    // whole=true（「全」ボタン）のときは街全体が収まる倍率にする
+    const vp=root.querySelector('.iso-viewport');
+    const stage=root.querySelector('.iso-stage');
+    const vw=vp.clientWidth||300,vh=vp.clientHeight||300;
+    const sw=parseFloat(stage.style.width)||vw,sh=parseFloat(stage.style.height)||vh;
+    let s=Math.min(vw/sw,vh/sh);
+    if(!isFinite(s)||s<=0)s=1;
+    const fit=Math.max(0.15,Math.min(s,1.5));
+    isoScale=whole?fit:Math.min(Math.max(fit*2,0.3),1.2);
+    panX=(vw-sw*isoScale)/2;
+    panY=(vh-sh*isoScale)/2;
+  }
+  function zoomBy(factor,root){
+    const vp=root.querySelector('.iso-viewport');
+    const vw=vp.clientWidth,vh=vp.clientHeight;
+    const old=isoScale;
+    const sx=(vw/2-panX)/old,sy=(vh/2-panY)/old;
+    isoScale=Math.max(0.2,Math.min(old*factor,2.5));
+    panX=vw/2-sx*isoScale;panY=vh/2-sy*isoScale;
+    applyIsoTransform(root);
+  }
+
+  // ======== Meetianとつないだ場合（仮）：「会議が終わった」の工事の車演出 ========
+  function onMeetingDone(root,infoMsgEl){
+    const candidates=blocks.filter(b=>blockStage(b)==='empty');
+    if(candidates.length===0){
+      infoMsgEl.textContent='今は空き地のプロジェクトがありません（仮）。';
+      infoMsgEl.hidden=false;
+      clearTimeout(infoMsgEl._t);
+      infoMsgEl._t=setTimeout(()=>{infoMsgEl.hidden=true;},2600);
+      return;
+    }
+    const target=candidates[Math.floor(Math.random()*candidates.length)];
+    if(!lastLayout)return;
+    const cell=lastLayout.cellsLogical.find(c=>c.type==='plot'&&c.blockId===target.id);
+    if(!cell)return;
+    spawnTruck(root,cell.row,cell.col,()=>{
+      const firstTodo=leafTasksOf(target).find(p=>p.state!=='built');
+      if(firstTodo)markBuilt(target.id,firstTodo.id);
+    },{img:'vehicle_worktruck.png',imgBack:'vehicle_worktruck_back.png'});
+  }
+  // マスの集まり（1つでもよい）から、いちばん近い道路のマスをたどって探す（工事の車・消防車を道路に沿って走らせるため）
+  // cells＝起点にするマスの配列（例：区画が占める全マス）。どのマスから数えても1歩として、最初に見つかった道路のマスを返す
+  function nearestRoadCellFromCells(cells,typeMap){
+    const seen=new Set(cells.map(c=>c.row+'_'+c.col));
+    let frontier=cells.slice();
+    let guard=0;
+    while(frontier.length&&guard<200){
+      const next=[];
+      for(const cell of frontier){
+        const neighbors=[{row:cell.row-1,col:cell.col},{row:cell.row+1,col:cell.col},{row:cell.row,col:cell.col-1},{row:cell.row,col:cell.col+1}];
+        for(const nb of neighbors){
+          const key=nb.row+'_'+nb.col;
+          if(seen.has(key))continue;
+          seen.add(key);
+          if(typeMap.get(key)==='road')return nb;
+          next.push(nb);
+        }
+      }
+      frontier=next;guard++;
+    }
+    return null;
+  }
+  // 区画（plotのcellsLogicalエントリ）が占める全マスを返す（foot=2は左上から2×2の4マス。markUsedと同じ範囲）
+  function plotOccupiedCells(cell){
+    const foot=cell.foot||1;
+    const cells=[{row:cell.row,col:cell.col}];
+    if(foot===2)cells.push({row:cell.row,col:cell.col+1},{row:cell.row+1,col:cell.col},{row:cell.row+1,col:cell.col+1});
+    return cells;
+  }
+  function buildTypeMap(){
+    const typeMap=new Map();
+    lastLayout.cellsLogical.forEach(c=>typeMap.set(c.row+'_'+c.col,c.type));
+    return typeMap;
+  }
+  // ======== 消防車・工事の車が道路のマスをたどって走る演出（2026-10-05・仮） ========
+  // 1マスあたりの時間＝TRUCK_TOTAL_MS÷道順のマス数（仮）ちびぃ：演出なので急ぎすぎない
+  const TRUCK_TOTAL_MS=6000,TRUCK_STEP_MIN_MS=180,TRUCK_STEP_MAX_MS=350;
+  // 車の絵は切り替えで読み直すとちらつくので、最初に4枚まとめて読み込んでおく
+  ['vehicle_firetruck.png','vehicle_firetruck_back.png','vehicle_worktruck.png','vehicle_worktruck_back.png'].forEach(f=>{const im=new Image();im.src='モック素材_20261004/'+f;});
+  // destから道路のマスだけを幅優先で探し、地図の端（rowかcolが0か最後）に着く道路マスを全部集める。
+  // 道順のマス数（depth+1）が6以上になる中で一番近いもの、無ければ一番遠いものを出発点にして、そこからdestまでの道順を返す（端→destの順）。
+  // 端の道路マスが1つも見つからなければnull（道路がつながっていないときだけ）
+  // 2026-10-05修正：destそのものが端だと道順が1マスで短すぎるため、最初に見つかった端で決め打ちせず距離で選び直すようにした（ちびぃ確認のCodex/実機指摘）
+  function findRoadPathToEdge(dest,typeMap,totalRows,totalCols){
+    const key=c=>c.row+'_'+c.col;
+    if(typeMap.get(key(dest))!=='road')return null;
+    const parent=new Map();
+    const seen=new Set([key(dest)]);
+    const depthOf=new Map([[key(dest),0]]);
+    const isEdge=c=>c.row===0||c.row===totalRows-1||c.col===0||c.col===totalCols-1;
+    const edgeCells=[]; // {cell,depth}。depth＝destから何マス離れているか（道順のマス数はdepth+1）
+    if(isEdge(dest))edgeCells.push({cell:dest,depth:0});
+    let frontier=[dest];
+    let guard=0;
+    while(frontier.length&&guard<400){
+      const next=[];
+      for(const cell of frontier){
+        const d=depthOf.get(key(cell));
+        const neighbors=[{row:cell.row-1,col:cell.col},{row:cell.row+1,col:cell.col},{row:cell.row,col:cell.col-1},{row:cell.row,col:cell.col+1}];
+        for(const nb of neighbors){
+          const k=key(nb);
+          if(seen.has(k)||typeMap.get(k)!=='road')continue;
+          seen.add(k);parent.set(k,cell);depthOf.set(k,d+1);
+          if(isEdge(nb))edgeCells.push({cell:nb,depth:d+1});
+          next.push(nb);
+        }
+      }
+      frontier=next;guard++;
+    }
+    if(edgeCells.length===0)return null;
+    const withEnough=edgeCells.filter(e=>e.depth+1>=6);
+    let pick;
+    if(withEnough.length){
+      pick=withEnough[0];
+      withEnough.forEach(e=>{if(e.depth<pick.depth)pick=e;}); // 6マス以上の中で一番近い（depthが一番小さい）
+    }else{
+      pick=edgeCells[0];
+      edgeCells.forEach(e=>{if(e.depth>pick.depth)pick=e;}); // 6マス以上が無ければ一番遠いもの
+    }
+    const path=[pick.cell];
+    let curKey=key(pick.cell);
+    while(curKey!==key(dest)){
+      const p=parent.get(curKey);
+      path.push(p);
+      curKey=key(p);
+    }
+    return path;
+  }
+  // 道順の出発点（地図の端のマス）の、地図の外側へ1マスずらした位置。rowかcolのどちらが端かで方向を決める
+  function outwardCellFor(edge,totalRows,totalCols){
+    if(edge.row===0)return{row:edge.row-1,col:edge.col};
+    if(edge.row===totalRows-1)return{row:edge.row+1,col:edge.col};
+    if(edge.col===0)return{row:edge.row,col:edge.col-1};
+    return{row:edge.row,col:edge.col+1}; // col===totalCols-1
+  }
+  // 道順が見つからないときのフォールバック用：そのマスから一番近い地図の端の方向（row-1／row+1／col-1／col+1）を返す
+  function nearestMapEdgeDir(cell,totalRows,totalCols){
+    const distTop=cell.row,distBottom=totalRows-1-cell.row,distLeft=cell.col,distRight=totalCols-1-cell.col;
+    const min=Math.min(distTop,distBottom,distLeft,distRight);
+    if(min===distTop)return{row:-1,col:0};
+    if(min===distBottom)return{row:1,col:0};
+    if(min===distLeft)return{row:0,col:-1};
+    return{row:0,col:1};
+  }
+  // 1マス進む向き（row/colの差分）から、前向き・後ろ向き・左右反転を決める
+  // col+1＝前向きそのまま／row+1＝前向き反転／row-1＝後ろ向きそのまま／col-1＝後ろ向き反転
+  function truckSpriteForDelta(dRow,dCol,frontFile,backFile){
+    if(dCol===1)return{file:frontFile,flip:false,fallback:''};
+    if(dRow===1)return{file:frontFile,flip:true,fallback:''};
+    if(dRow===-1)return{file:backFile,flip:false,fallback:frontFile};
+    return{file:backFile,flip:true,fallback:frontFile};
+  }
+  // 車の絵・左右反転を切り替える（絵が読めないときはfallbackの絵、それも無ければ絵文字にする）
+  function setTruckSprite(truck,file,flip,fallback){
+    const img=truck.querySelector('.iso-truck-img');
+    if(img.dataset.file!==file){
+      img.dataset.file=file;img.dataset.fallback=fallback||'';
+      img.src='モック素材_20261004/'+file;
+    }
+    truck.style.transform='translate(-50%,-50%) scaleX('+(flip?-1:1)+')';
+  }
+  // 止まった位置から建物（炎）の方を向く：建物が画面の下側なら前向き・上側なら後ろ向き、左右は今の判定のまま
+  function faceTruckToward(truck,fromPos,toPos,frontFile,backFile){
+    const flip=toPos.left<fromPos.left;
+    if(toPos.top>=fromPos.top)setTruckSprite(truck,frontFile,flip,'');
+    else setTruckSprite(truck,backFile,flip,frontFile);
+  }
+  // cells（マスの配列）をつなぐ区間を順番に、1区間msPerLegかけて直線（linear）移動させる
+  // 建物・道路と同じステージの座標（toPixelの値そのまま）で位置を決めるので、panX/panY/isoScaleは掛けない
+  // （ステージ自体がtransform:scale(isoScale)されるので、車も地図ごと拡大縮小・パンされてずれない）
+  // z-indexは今通っている2マスのうち手前側（row+colが大きい方）のキー×10＋5にして、区画・道路と同じ重なり順に混ぜる
+  function driveTruckThroughCells(truck,cells,msPerLeg,frontFile,backFile,fadeInFirst,fadeOutLast,onDone){
+    if(cells.length<2){onDone();return;}
+    const legCount=cells.length-1;
+    let legIndex=0,legStart=null;
+    const applySprite=()=>{
+      const a=cells[legIndex],b=cells[legIndex+1];
+      const s=truckSpriteForDelta(b.row-a.row,b.col-a.col,frontFile,backFile);
+      setTruckSprite(truck,s.file,s.flip,s.fallback);
+      truck.style.zIndex=Math.max(a.row+a.col,b.row+b.col)*10+5;
+    };
+    applySprite();
+    const frame=(now)=>{
+      if(legStart===null)legStart=now;
+      const a=cells[legIndex],b=cells[legIndex+1];
+      const t=Math.min(1,(now-legStart)/msPerLeg);
+      const pa=toPixel(a.row,a.col,lastLayout.totalRows),pb=toPixel(b.row,b.col,lastLayout.totalRows);
+      const sx=pa.x+(pb.x-pa.x)*t,sy=pa.y+(pb.y-pa.y)*t;
+      truck.style.left=(sx+TILE_W/2)+'px';
+      truck.style.top=(sy+TILE_H*0.55)+'px';
+      if(fadeInFirst&&legIndex===0)truck.style.opacity=String(t);
+      if(fadeOutLast&&legIndex===legCount-1)truck.style.opacity=String(1-t);
+      if(t>=1){
+        legIndex++;
+        if(legIndex>=legCount){onDone();return;}
+        legStart=null;
+        applySprite();
+      }
+      truck._raf=requestAnimationFrame(frame);
+    };
+    truck._raf=requestAnimationFrame(frame);
+  }
+  // opts（仮・2026-10-05追加）：emoji＝絵が読めないときの代わりの絵文字（省略時は工事の車🚚）／img＝車の絵（省略時はvehicle_worktruck.png）／imgBack＝後ろ姿の絵（省略時はimgの末尾に_backを付けたもの）
+  // holdMs＝到着後に少し止まってから来た道を戻って消えるまでの時間（省略時は到着と同時に消える＝今までどおり）
+  // footCells（仮・2026-10-05追加）＝道路を探す起点にするマスの配列（省略時は{row,col}の1マス）
+  // stopAtRoad（仮・2026-10-05追加）＝trueのときは区画に入らず、見つかった道路のマスで止まる（火事から戻る消防車用。工事の車は使わない＝今のまま区画まで入る）
+  function spawnTruck(root,row,col,onArrive,opts){
+    opts=opts||{};
+    const emoji=opts.emoji||'🚚',holdMs=opts.holdMs||0;
+    const frontFile=opts.img||'vehicle_worktruck.png';
+    const backFile=opts.imgBack||frontFile.replace('.png','_back.png');
+    const stage=root.querySelector('.iso-stage');
+    if(!stage||!lastLayout)return;
+    const typeMap=buildTypeMap();
+    const seedCells=opts.footCells||[{row,col}];
+    const viaCell=nearestRoadCellFromCells(seedCells,typeMap);
+    // 建物・道路と同じステージの座標系（toPixelの値そのまま）。panX/panY/isoScaleは掛けない（ステージ自体が拡大縮小・パンされるため）
+    const toStagePos=(r,c)=>{
+      const {x,y}=toPixel(r,c,lastLayout.totalRows);
+      return {left:x+TILE_W/2,top:y+TILE_H*0.55};
+    };
+    const buildingPos=toStagePos(row,col); // 建物（区画）そのものの位置。向きを合わせる目印にする
+    const finalPos=(opts.stopAtRoad&&viaCell)?toStagePos(viaCell.row,viaCell.col):buildingPos;
+    const viaPos=(!opts.stopAtRoad&&viaCell)?toStagePos(viaCell.row,viaCell.col):null;
+    // 道路のマスだけを通って地図の端まで行ける道順（端→viaCellの順）。見つからなければ今までどおり直接向かう
+    const roadPath=viaCell?findRoadPathToEdge(viaCell,typeMap,lastLayout.totalRows,lastLayout.totalCols):null;
+
+    const truck=document.createElement('div');
+    truck.className='iso-truck';
+    truck.innerHTML=`<img class="iso-truck-img" alt=""><span class="iso-truck-fallback" style="display:none">${emoji}</span>`;
+    const truckImg=truck.querySelector('.iso-truck-img');
+    truckImg.onerror=function(){
+      const fb=this.dataset.fallback;
+      if(fb&&this.dataset.file!==fb){this.dataset.file=fb;this.src='モック素材_20261004/'+fb;}
+      else{this.style.display='none';this.nextElementSibling.style.display='flex';}
+    };
+    // 大きさはステージの中の固定値（TILE_W×0.55）でよい。ステージごと拡大縮小されるので建物とのつり合いは自然に保たれる
+    truck.style.width=(TILE_W*0.55)+'px';truck.style.height=(TILE_W*0.55)+'px';
+    truck.style.zIndex=(row+col)*10+5;
+    stage.appendChild(truck);
+
+    if(roadPath){
+      // ======== 道路をたどって走る ========
+      const msPerLeg=Math.max(TRUCK_STEP_MIN_MS,Math.min(TRUCK_STEP_MAX_MS,TRUCK_TOTAL_MS/roadPath.length));
+      const edge=roadPath[0];
+      const appear=outwardCellFor(edge,lastLayout.totalRows,lastLayout.totalCols); // 出発点（地図の端）のさらに外側の1マス
+      const goCells=[appear].concat(roadPath);
+      truck.style.opacity='0';
+      driveTruckThroughCells(truck,goCells,msPerLeg,frontFile,backFile,true,false,()=>{
+        truck.style.opacity='1';
+        if(opts.stopAtRoad){
+          faceTruckToward(truck,finalPos,buildingPos,frontFile,backFile);
+          onArrive();
+          setTimeout(departRoad,holdMs);
+        }else{
+          // 工事の車：道路のマスから区画の中へ、今までどおり最後の1マスで入る
+          driveTruckThroughCells(truck,[viaCell,{row,col}],450,frontFile,backFile,false,false,()=>{
+            onArrive();
+            setTimeout(departRoad,holdMs);
+          });
+        }
+      });
+      function departRoad(){
+        if(!opts.stopAtRoad){
+          // 工事の車：区画の中→道路のマスへ、今までどおり最初の1マスで戻る
+          driveTruckThroughCells(truck,[{row,col},viaCell],500,frontFile,backFile,false,false,backAlongRoad);
+        }else{
+          backAlongRoad();
+        }
+      }
+      function backAlongRoad(){
+        const backCells=goCells.slice().reverse();
+        driveTruckThroughCells(truck,backCells,msPerLeg,frontFile,backFile,false,true,()=>{
+          if(truck._raf)cancelAnimationFrame(truck._raf);
+          truck.remove();
+        });
+      }
+    }else{
+      // ======== 道順が見つからないとき（道路がつながっていないときだけ）は、今までどおり直接向かう ========
+      // 2026-10-05・仮：ステージの座標系に変えたので、画面の外（-40px）ではなく地図の端の方向へ2マス分離れた位置から現れる／消える
+      const dir=nearestMapEdgeDir({row,col},lastLayout.totalRows,lastLayout.totalCols);
+      const awayPos=toStagePos(row+dir.row*2,col+dir.col*2);
+      setTruckSprite(truck,frontFile,false,'');
+      truck.style.opacity='1';
+      truck.style.left=awayPos.left+'px';truck.style.top=awayPos.top+'px';
+      const face=(fromLeft,toLeft)=>setTruckSprite(truck,frontFile,toLeft<fromLeft,'');
+      face(awayPos.left,viaPos?viaPos.left:finalPos.left);
+      const depart=()=>{
+        if(holdMs<=0){truck.remove();return;}
+        setTimeout(()=>{
+          const toPos=viaPos||awayPos;
+          face(finalPos.left,toPos.left);
+          requestAnimationFrame(()=>{
+            truck.style.transition='left .5s ease-in-out,top .5s ease-in-out';
+            truck.style.left=toPos.left+'px';truck.style.top=toPos.top+'px';
+          });
+          setTimeout(()=>truck.remove(),550);
+        },holdMs);
+      };
+      if(viaPos){
+        requestAnimationFrame(()=>{
+          truck.style.transition='left .5s ease-in-out,top .5s ease-in-out';
+          truck.style.left=viaPos.left+'px';truck.style.top=viaPos.top+'px';
+        });
+        setTimeout(()=>{
+          face(viaPos.left,finalPos.left);
+          truck.style.transition='left .45s ease-in-out,top .45s ease-in-out';
+          truck.style.left=finalPos.left+'px';
+          truck.style.top=finalPos.top+'px';
+        },520);
+        setTimeout(()=>{onArrive();depart();},1000);
+      }else{
+        requestAnimationFrame(()=>{
+          truck.style.transition='left .9s ease-in-out,top .9s ease-in-out';
+          truck.style.left=finalPos.left+'px';truck.style.top=finalPos.top+'px';
+        });
+        setTimeout(()=>{
+          if(opts.stopAtRoad)faceTruckToward(truck,finalPos,buildingPos,frontFile,backFile);
+          onArrive();depart();
+        },950);
+      }
+    }
+  }
+
+  function buildMapRoot(){
+    const root=document.createElement('div');
+    root.innerHTML=`<div class="iso-viewport"><div class="iso-stage"></div>
+      <div class="iso-meetian-ctrl">
+        <label class="iso-meetian-toggle"><input type="checkbox" class="meetian-toggle-input">Meetianとつないだ場合（仮）</label>
+        <div class="iso-meetian-actions" hidden>
+          <button type="button" class="btn meetian-meeting-btn">（仮）会議が終わった</button>
+          <button type="button" class="btn meetian-fail-btn">（仮）Meetianとつながらなかった</button>
+        </div>
+        <div class="msg meetian-fail-msg" hidden>Meetianとつながりませんでした（仮）。住民の表示を一時的に止めています。<br><button type="button" class="btn meetian-retry-btn" style="margin-top:6px">もう一度試す</button></div>
+        <div class="msg meetian-info-msg" hidden></div>
+      </div>
+      <div class="iso-zoom-controls"><button type="button" class="iso-zoom-btn iso-tag-toggle" data-tag-toggle="1" aria-label="名前を表示">名</button><button type="button" class="iso-zoom-btn" data-z="in">＋</button><button type="button" class="iso-zoom-btn" data-z="out">－</button><button type="button" class="iso-zoom-btn" data-z="all" aria-label="街全体を見る">全</button></div>
+    </div>`;
+    const vp=root.querySelector('.iso-viewport');
+    let drag=null;
+    vp.addEventListener('pointerdown',e=>{
+      if(e.target.closest('.iso-zoom-btn,.iso-meetian-ctrl'))return;
+      drag={sx:e.clientX,sy:e.clientY,spx:panX,spy:panY,moved:false,hit:e.target.closest('.iso-tile-hit,.iso-tile-body-hit'),residentHit:e.target.closest('.iso-resident')};
+      vp.setPointerCapture(e.pointerId);
+    });
+    vp.addEventListener('pointermove',e=>{
+      if(!drag)return;
+      const dx=e.clientX-drag.sx,dy=e.clientY-drag.sy;
+      if(Math.abs(dx)>4||Math.abs(dy)>4)drag.moved=true;
+      if(drag.moved){panX=drag.spx+dx;panY=drag.spy+dy;applyIsoTransform(root);}
+    });
+    vp.addEventListener('pointerup',()=>{
+      if(!drag)return;
+      if(!drag.moved&&drag.hit){
+        const tile=drag.hit.closest('.iso-tile');
+        selectBuilding(tile.dataset.block,drag.hit);
+      }else if(!drag.moved&&drag.residentHit){
+        selectResident(drag.residentHit.dataset.resident,drag.residentHit);
+      }
+      drag=null;
+    });
+    vp.addEventListener('pointercancel',()=>{drag=null});
+    root.querySelector('[data-z="in"]').addEventListener('click',()=>zoomBy(1.25,root));
+    root.querySelector('[data-z="out"]').addEventListener('click',()=>zoomBy(1/1.25,root));
+    root.querySelector('[data-z="all"]').addEventListener('click',()=>{fitMapToViewport(root,true);applyIsoTransform(root);});
+    root.querySelector('[data-tag-toggle]').addEventListener('click',e=>{
+      showAllNames=!showAllNames;
+      e.currentTarget.classList.toggle('is-on',showAllNames);
+      refreshTagVisibility(root);
+    });
+    const meetianToggleInput=root.querySelector('.meetian-toggle-input');
+    const meetianActions=root.querySelector('.iso-meetian-actions');
+    const meetianFailMsg=root.querySelector('.meetian-fail-msg');
+    const meetianInfoMsg=root.querySelector('.meetian-info-msg');
+    meetianToggleInput.addEventListener('change',()=>{
+      meetianOn=meetianToggleInput.checked;
+      meetianActions.hidden=!meetianOn;
+      if(!meetianOn){meetianConnFail=false;meetianFailMsg.hidden=true;}
+      renderAll();
+    });
+    root.querySelector('.meetian-meeting-btn').addEventListener('click',()=>onMeetingDone(root,meetianInfoMsg));
+    root.querySelector('.meetian-fail-btn').addEventListener('click',()=>{
+      meetianConnFail=true;meetianFailMsg.hidden=false;renderAll();
+    });
+    root.querySelector('.meetian-retry-btn').addEventListener('click',()=>{
+      meetianConnFail=false;meetianFailMsg.hidden=true;renderAll();
+    });
+    return root;
+  }
+  // ======== 4象限 ========
+  // 子タスクと孫タスクの両方を返す（孫にはparentに親の子タスクを入れる）
+  function allPlots(){
+    const list=[];
+    blocks.forEach(b=>b.plots.forEach(p=>{
+      list.push({b,p,parent:null});
+      (p.children||[]).forEach(g=>list.push({b,p:g,parent:p}));
+    }));
+    return list;
+  }
+  function buildQuadrantRoot(){
+    const root=document.createElement('div');
+    root.innerHTML=`<p class="q-note">重要度・緊急度は（仮）の値です</p><div class="q-grid">
+      <div class="q-cell" data-q="hh-hu"><p class="q-cell-label">重要・緊急</p><div class="q-items" data-imp="high" data-urg="high"></div></div>
+      <div class="q-cell" data-q="hl-hu"><p class="q-cell-label">緊急（重要度は低め）</p><div class="q-items" data-imp="low" data-urg="high"></div></div>
+      <div class="q-cell" data-q="hh-lu"><p class="q-cell-label">重要（急ぎではない）</p><div class="q-items" data-imp="high" data-urg="low"></div></div>
+      <div class="q-cell" data-q="hl-lu"><p class="q-cell-label">そのほか</p><div class="q-items" data-imp="low" data-urg="low"></div></div>
+    </div>`;
+    return root;
+  }
+  function renderQuadrantInto(root){
+    root.querySelectorAll('.q-items').forEach(wrap=>{
+      const imp=wrap.dataset.imp,urg=wrap.dataset.urg;
+      wrap.innerHTML='';
+      allPlots().filter(({p})=>p.imp===imp&&p.urg===urg).forEach(({b,p,parent})=>{
+        const chip=document.createElement('span');
+        chip.className='q-chip'+(isEffectivelyDone(p)?' is-built':'')+(isHL(b.id,p.id)?' is-hl':'');
+        chip.dataset.bid=b.id;chip.dataset.pid=p.id;
+        chip.innerHTML=`<span class="qt-wrap"><span class="qt">${p.label}</span>${parent?`<span class="q-chip-parent">${parent.label}</span>`:''}</span>`;
+        chip.addEventListener('click',()=>selectTask(b.id,p.id,chip));
+        wrap.appendChild(chip);
+      });
+    });
+  }
+
+  // ======== 分解後のリスト ========
+  // 初期は「進行中（まだ終わっていない）」プロジェクトだけ開く。完成済みは畳んでおく
+  let listCollapsedSet=new Set(blocks.filter(b=>leafTasksOf(b).every(p=>p.state==='built')).map(b=>b.id));
+  // 孫を持つ子タスクの「畳む・開く」状態（キーは bId:pId）。デフォルトは開く
+  let listChildCollapsedSet=new Set();
+  function buildListRoot(){
+    const root=document.createElement('div');
+    root.innerHTML=`<div class="list-controls">
+      <input type="text" class="list-search" placeholder="タスクを検索">
+      <label class="list-hide-toggle"><input type="checkbox" class="list-hide-done" checked> まだのものだけ</label>
+    </div><div class="list-wrap"></div>`;
+    root.querySelector('.list-search').addEventListener('input',()=>renderListInto(root));
+    root.querySelector('.list-hide-done').addEventListener('change',()=>renderListInto(root));
+    return root;
+  }
+  function renderListInto(root){
+    const wrap=root.querySelector('.list-wrap');
+    const term=(root.querySelector('.list-search').value||'').trim().toLowerCase();
+    const hideDone=root.querySelector('.list-hide-done').checked;
+    wrap.innerHTML='';
+    blocks.forEach(b=>{
+      const leaves=leafTasksOf(b);
+      const built=leaves.filter(p=>p.state==='built').length;
+      let plots=b.plots;
+      if(term)plots=plots.filter(p=>p.label.toLowerCase().includes(term)||(p.children||[]).some(c=>c.label.toLowerCase().includes(term)));
+      if(hideDone)plots=plots.filter(p=>!isEffectivelyDone(p));
+      if((term||hideDone)&&plots.length===0)return;
+      const collapsed=listCollapsedSet.has(b.id);
+      const sec=document.createElement('div');sec.className='list-block';sec.dataset.block=b.id;
+      const head=document.createElement('div');head.className='list-block-head';head.style.cursor='pointer';
+      head.innerHTML=`<span>${collapsed?'▸':'▾'} ${b.name}</span><span class="muted" style="font-size:11px">${built}/${leaves.length}</span>`;
+      head.addEventListener('click',()=>{
+        if(listCollapsedSet.has(b.id))listCollapsedSet.delete(b.id);else listCollapsedSet.add(b.id);
+        renderListInto(root);
+      });
+      sec.appendChild(head);
+      if(!collapsed){
+        plots.forEach(p=>{
+          const hasKids=!!(p.children&&p.children.length);
+          const childKey=b.id+':'+p.id;
+          const childCollapsed=listChildCollapsedSet.has(childKey);
+          const row=document.createElement('div');
+          row.className='list-row'+(isEffectivelyDone(p)?' is-built':'')+(isHL(b.id,p.id)?' is-hl':'');
+          row.dataset.bid=b.id;row.dataset.pid=p.id;
+          const kidsDoing=hasKids&&p.children.some(c=>c.state==='building'||c.state==='built')&&!isEffectivelyDone(p);
+          const icon=isEffectivelyDone(p)?'🏠':(kidsDoing||p.state==='building'?'🚧':'・');
+          const arrowHtml=hasKids?`<span class="list-arrow">${childCollapsed?'▸':'▾'}</span>`:'<span class="list-arrow-spacer"></span>';
+          row.innerHTML=`${arrowHtml}<span>${icon}</span><span class="lt">${p.label}${p.meetian?'（Meetianから）':''}</span>${hasKids?'<button type="button" class="list-addgrandchild-btn">＋孫（仮）</button>':''}`;
+          if(hasKids){
+            row.querySelector('.list-arrow').addEventListener('click',e=>{
+              e.stopPropagation();
+              if(listChildCollapsedSet.has(childKey))listChildCollapsedSet.delete(childKey);else listChildCollapsedSet.add(childKey);
+              renderListInto(root);
+            });
+            row.querySelector('.list-addgrandchild-btn').addEventListener('click',e=>{
+              e.stopPropagation();
+              const wasSmoke=neglectStageOf(b)===3; // 孫を足す前（完成済みなら足してもfalseのまま）
+              p.children.push({id:'g-'+Date.now(),label:'新しい孫タスク（仮）',state:'empty',imp:'low',urg:'low'});
+              resetNeglectIfAny(b.id,{wasSmoke});
+              renderAll();
+            });
+          }
+          row.addEventListener('click',()=>selectTask(b.id,p.id,row));
+          sec.appendChild(row);
+          if(hasKids&&!childCollapsed){
+            p.children.forEach(g=>{
+              const grow=document.createElement('div');
+              grow.className='list-row list-row-grandchild'+(g.state==='built'?' is-built':'')+(isHL(b.id,g.id)?' is-hl':'');
+              grow.dataset.bid=b.id;grow.dataset.pid=g.id;
+              const gicon=g.state==='built'?'🏠':g.state==='building'?'🚧':'・';
+              grow.innerHTML=`<span>${gicon}</span><span class="lt">${g.label}</span>`;
+              grow.addEventListener('click',()=>selectTask(b.id,g.id,grow));
+              sec.appendChild(grow);
+            });
+          }
+        });
+      }
+      wrap.appendChild(sec);
+    });
+  }
+  function focusListOnProject(blockId){
+    listCollapsedSet=new Set(blocks.map(b=>b.id).filter(id=>id!==blockId));
+    if(currentMode==='mobile'&&currentTab!=='list'){
+      currentTab='list';
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab==='list'));
+      mountPanels();
+    }
+    renderAll();
+    requestAnimationFrame(()=>{
+      const sec=panelList.querySelector('.list-block[data-block="'+blockId+'"]');
+      if(sec)sec.scrollIntoView({block:'start',behavior:'smooth'});
+    });
+  }
+
+  // ======== 選択したものの出し方（仮：A／B） ========
+  const popoverEl=document.getElementById('hover-popover');
+  function hidePopover(){popoverEl.hidden=true;}
+  function positionPopover(r,pw,ph){
+    let left=r.left+r.width/2-pw/2,top=r.top-ph-8;
+    const wrap=currentMode==='mobile'?document.getElementById('mobile-wrap'):document.getElementById('pc-wrap');
+    const f=wrap.getBoundingClientRect();
+    if(top<f.top+6)top=r.bottom+8;
+    left=Math.max(f.left+6,Math.min(left,f.right-pw-6));
+    top=Math.min(top,f.bottom-ph-6);
+    return {left,top};
+  }
+  // 住民の残っている約束の一覧（Meetianから書き戻さない。このツールの中だけで隠す）
+  function commitmentsOf(residentId){
+    const list=[];
+    blocks.forEach(b=>{
+      b.plots.forEach(p=>{
+        if(p.residentId===residentId)list.push({bId:b.id,pId:p.id,label:p.label,due:p.due});
+        (p.children||[]).forEach(g=>{if(g.residentId===residentId)list.push({bId:b.id,pId:g.id,label:g.label,due:g.due});});
+      });
+    });
+    return list;
+  }
+  function taskBubbleHtml(bId,pId,withActions){
+    const {block,plot}=findPlot(bId,pId);
+    if(!plot)return '';
+    if(!withActions)return `<p class="pop-name">${plot.label}</p><p class="pop-sub">${block.name}</p>`;
+    const hasKids=!!(plot.children&&plot.children.length);
+    const built=isEffectivelyDone(plot);
+    const doneArea=hasKids?'<p class="muted" style="font-size:11px;margin:0 0 6px">孫が全部終わると自動で終わりになります（仮）</p>':(built?'':'<button type="button" class="btn" data-bubble-done="1">終わった</button>');
+    return `<p class="pop-name">${plot.label}${plot.meetian?'（Meetianから・仮）':''}</p><p class="pop-sub">${block.name}</p>${hasKids?doneArea:''}<div class="pop-actions">${hasKids?'':doneArea}<button type="button" class="btn" data-bubble-rename="1">名前を直す</button><button type="button" class="btn primary" data-bubble-open="1">開く</button></div>`;
+  }
+  function buildingBubbleHtml(blockId,withActions){
+    const block=blocks.find(b=>b.id===blockId);
+    if(!block)return '';
+    const leaves=leafTasksOf(block);
+    const total=leaves.length,done=leaves.filter(p=>p.state==='built').length,remain=total-done;
+    const statusText=block.completedNote?block.completedNote:(remain===0?'完成':'あと'+remain+'つで完成');
+    const idleDays=block.idleDays||0;
+    const neglectHtml=(idleDays>=NEGLECT_DAYS.weeds&&blockStage(block)!=='complete')?`<p class="pop-neglect">${idleDays}日動いていません（仮）</p>`:'';
+    // 火事（40日以上）のときだけ1行足す。15日・25日には出さない（2026-10-05・仮）
+    const fireHintHtml=(idleDays>=NEGLECT_DAYS.fire&&blockStage(block)!=='complete')?`<p class="pop-neglect">どれか1つタスクを動かすと火事が消えます（仮）</p>`:'';
+    if(!withActions)return `<p class="pop-name">${block.name}</p><p class="pop-sub">${statusText}</p>${neglectHtml}${fireHintHtml}`;
+    return `<p class="pop-name">${block.name}</p><p class="pop-sub">${statusText}</p>${neglectHtml}${fireHintHtml}<div class="pop-actions"><button type="button" class="btn primary" data-bubble-seetasks="1">このプロジェクトのタスクを見る</button></div>`;
+  }
+  function residentBubbleHtml(residentId,withActions){
+    const resident=RESIDENTS.find(r=>r.id===residentId);
+    if(!resident)return '';
+    const commits=commitmentsOf(residentId).filter(c=>!dismissedCommitments.has(residentId+'|'+c.bId+':'+c.pId));
+    if(!withActions)return `<p class="pop-name">${resident.fullName}</p><p class="pop-sub">残り${commits.length}件の約束（仮）</p>`;
+    const lastActive=resident.daysInactive===0?'今日':resident.daysInactive+'日前';
+    const rows=commits.map(c=>`<div class="bubble-commit-row" data-bubble-commit="${c.bId}:${c.pId}"><strong>${c.label}</strong><span class="bubble-commit-meta">期限：${c.due||'未定（仮）'}／最後に動いた日：${lastActive}</span><button type="button" class="bubble-commit-dismiss" data-bubble-dismiss="${residentId}|${c.bId}:${c.pId}">やらない（社交辞令）</button></div>`).join('');
+    const empty=commits.length===0?'<p class="muted">残っている約束はありません（仮）</p>':'';
+    return `<p class="pop-name">${resident.fullName}</p><p class="bubble-commit-note">※「やらない」を押しても、Meetian側のデータは書き換えません（仮・このツールの中だけで隠します）</p>${rows}${empty}`;
+  }
+  function showRenameForm(bId,pId,root){
+    const {block,plot}=findPlot(bId,pId);
+    if(!plot)return;
+    root.innerHTML=`<p class="pop-name">名前を直す（仮・保存はされません）</p><input type="text" class="demo-input bubble-rename-input" style="font-size:16px"><div class="pop-actions" style="margin-top:6px"><button type="button" class="btn primary" data-bubble-rename-ok="1">確定</button></div>`;
+    const input=root.querySelector('.bubble-rename-input');
+    input.value=plot.label;
+    input.focus();
+    root.querySelector('[data-bubble-rename-ok]').addEventListener('click',()=>{
+      const v=input.value.trim();
+      if(v){
+        const wasSmoke=block&&neglectStageOf(block)===3; // 名前を直す前（状態は変わらないのでこの時点の値でよい）
+        plot.label=v;
+        resetNeglectIfAny(bId,{wasSmoke});
+      }
+      renderAll();
+    });
+  }
+  function wireBubbleActions(root){
+    const doneBtn=root.querySelector('[data-bubble-done]');
+    if(doneBtn)doneBtn.addEventListener('click',()=>{markBuilt(selection.bId,selection.pId);renderBubblePanel();});
+    const renameBtn=root.querySelector('[data-bubble-rename]');
+    if(renameBtn)renameBtn.addEventListener('click',()=>showRenameForm(selection.bId,selection.pId,root));
+    const openBtn=root.querySelector('[data-bubble-open]');
+    if(openBtn)openBtn.addEventListener('click',()=>openTaskModal(selection.bId,selection.pId));
+    const seeBtn=root.querySelector('[data-bubble-seetasks]');
+    if(seeBtn)seeBtn.addEventListener('click',()=>focusListOnProject(selection.blockId));
+    root.querySelectorAll('[data-bubble-commit]').forEach(el=>{
+      el.addEventListener('click',e=>{
+        if(e.target.closest('[data-bubble-dismiss]'))return;
+        const [bId,pId]=el.dataset.bubbleCommit.split(':');
+        selectTask(bId,pId);
+      });
+    });
+    root.querySelectorAll('[data-bubble-dismiss]').forEach(el=>{
+      el.addEventListener('click',e=>{
+        e.stopPropagation();
+        dismissedCommitments.add(el.dataset.bubbleDismiss);
+        renderBubblePanel();
+      });
+    });
+  }
+  function renderBubblePanel(){
+    const mobileEl=document.getElementById('bubble-panel-mobile');
+    const pcEl=document.getElementById('bubble-panel-pc');
+    const show=bubbleMode==='A';
+    mobileEl.hidden=!(show&&currentMode==='mobile');
+    pcEl.hidden=!(show&&currentMode==='pc');
+    if(!show)return;
+    const target=currentMode==='mobile'?mobileEl:pcEl;
+    let html='<p class="bubble-panel-empty">建物を押すと、ここに出ます</p>';
+    if(selection){
+      if(selection.kind==='task')html=taskBubbleHtml(selection.bId,selection.pId,true);
+      else if(selection.kind==='building')html=buildingBubbleHtml(selection.blockId,true);
+      else if(selection.kind==='resident')html=residentBubbleHtml(selection.residentId,true);
+    }
+    target.innerHTML=html;
+    wireBubbleActions(target);
+  }
+  // renderAll()は地図のタイル・4象限のカード・リストの行をすべて作り直すため、
+  // 押した時点のanchorElは古い（もう画面に無い）要素になる。
+  // 作り直したあとの画面から、同じ物の要素を探し直す。
+  function panelRootOf(el){
+    if(!el)return null;
+    if(panelMap.contains(el))return panelMap;
+    if(panelQuadrant.contains(el))return panelQuadrant;
+    if(panelList.contains(el))return panelList;
+    return null;
+  }
+  function findFreshAnchorFor(sel,viewRoot){
+    if(!sel||!viewRoot)return null;
+    if(sel.kind==='building')return viewRoot.querySelector('.iso-tile[data-block="'+sel.blockId+'"] .iso-tile-hit');
+    if(sel.kind==='resident')return viewRoot.querySelector('.iso-resident[data-resident="'+sel.residentId+'"]');
+    if(sel.kind==='task')return viewRoot.querySelector('[data-bid="'+sel.bId+'"][data-pid="'+sel.pId+'"]');
+    return null;
+  }
+  function showFloatingTag(anchorEl){
+    // 探し直しても見つからない・画面から外れた要素は名札を出さない（左上に出さないため）
+    if(!anchorEl||!anchorEl.isConnected||!selection){hidePopover();return;}
+    let html='';
+    if(selection.kind==='task')html=taskBubbleHtml(selection.bId,selection.pId,false);
+    else if(selection.kind==='building')html=buildingBubbleHtml(selection.blockId,false);
+    else if(selection.kind==='resident')html=residentBubbleHtml(selection.residentId,false);
+    if(!html){hidePopover();return;}
+    popoverEl.innerHTML=html;
+    popoverEl.hidden=false;
+    const r=anchorEl.getBoundingClientRect();
+    const pos=positionPopover(r,popoverEl.offsetWidth,popoverEl.offsetHeight);
+    popoverEl.style.left=pos.left+'px';popoverEl.style.top=pos.top+'px';
+  }
+  function showBubbleForSelection(anchorEl){
+    renderBubblePanel();
+    if(bubbleMode==='B')showFloatingTag(anchorEl);else hidePopover();
+  }
+  function selectTask(bId,pId,anchorEl){
+    const already=selection&&selection.kind==='task'&&selection.bId===bId&&selection.pId===pId;
+    selection={kind:'task',bId,pId};
+    showNameTagFor(bId);
+    const viewRoot=panelRootOf(anchorEl);
+    renderAll();
+    if(already){openTaskModal(bId,pId);return;}
+    showBubbleForSelection(findFreshAnchorFor(selection,viewRoot));
+  }
+  function selectBuilding(blockId,anchorEl){
+    selection={kind:'building',blockId};
+    showNameTagFor(blockId);
+    const viewRoot=panelRootOf(anchorEl);
+    renderAll();
+    showBubbleForSelection(findFreshAnchorFor(selection,viewRoot));
+  }
+  function selectResident(residentId,anchorEl){
+    selection={kind:'resident',residentId};
+    const viewRoot=panelRootOf(anchorEl);
+    renderAll();
+    showBubbleForSelection(findFreshAnchorFor(selection,viewRoot));
+  }
+
+  document.addEventListener('pointerdown',e=>{
+    if(bubbleMode!=='B')return;
+    if(popoverEl.hidden)return;
+    if(popoverEl.contains(e.target))return;
+    if(e.target.closest('.iso-tile-hit,.q-chip,.list-row,.iso-resident'))return;
+    hidePopover();
+  });
+
+  // ======== タスクの中身モーダル ========
+  const taskModal=document.getElementById('task-modal');
+  function openTaskModal(bId,pId){
+    currentTask={bId,pId};
+    const {block,plot}=findPlot(bId,pId);
+    const hasKids=!!(plot.children&&plot.children.length);
+    document.getElementById('task-block-name').textContent=block.name;
+    document.getElementById('task-name').textContent=plot.label+(plot.meetian?'（Meetianから・仮）':'');
+    const built=isEffectivelyDone(plot);
+    const stateLabel=built?'建物（終わっています）':plot.state==='building'?'建設中（やっている途中）':'空き地（まだ手をつけていません）';
+    document.getElementById('task-state').textContent='状態：'+stateLabel;
+    document.getElementById('task-complete-btn').hidden=(built||hasKids);
+    document.getElementById('task-haskids-note').hidden=!hasKids;
+    document.getElementById('task-done-message').hidden=true;
+    taskModal.hidden=false;
+  }
+  document.getElementById('task-close-btn').addEventListener('click',()=>{taskModal.hidden=true});
+  document.getElementById('task-complete-btn').addEventListener('click',()=>{
+    if(!currentTask)return;
+    markBuilt(currentTask.bId,currentTask.pId);
+    document.getElementById('task-complete-btn').hidden=true;
+    document.getElementById('task-done-message').hidden=false;
+    document.getElementById('task-state').textContent='状態：建物（たったいま終わりました）';
+  });
+
+  // ======== 新しいプロジェクトを足すモーダル ========
+  const dummySeed=[
+    {id:'d1',label:'内容を書き出す（仮）',imp:'high',urg:'high'},
+    {id:'d2',label:'必要な人に声をかける（仮）',imp:'high',urg:'low'},
+    {id:'d3',label:'期限を決める（仮）',imp:'low',urg:'high'}
+  ];
+  // 「ホントにやる？」の選択肢（仮。仕様書REALLY_DOING_OPTIONSの初期値をそのまま使う。文言は相談中）
+  const REALLY_DOING_OPTIONS_DEMO=['やる','まだ決めてない','やらない'];
+  const newprojModal=document.getElementById('newproj-modal');
+  const npInput=document.getElementById('newproj-input');
+  const npEmptyErr=document.getElementById('newproj-empty-error');
+  const npResult=document.getElementById('newproj-result');
+  const npResultTitle=document.getElementById('newproj-result-title');
+  const npMergeBtn=document.getElementById('newproj-merge-toggle-btn');
+  const npCardsWrap=document.getElementById('newproj-cards');
+  const npIncompleteErr=document.getElementById('newproj-incomplete-error');
+  const npNoneErr=document.getElementById('newproj-none-error');
+  const npSuccess=document.getElementById('newproj-success');
+  const npCreateBtn=document.getElementById('newproj-create-btn');
+  let npCards=[]; // 分けたプロジェクトの下書き（カード1枚＝1プロジェクト）
+  let lastSplitCards=null; // 「分けずに1つにまとめる」前の状態（「やっぱり分ける」で戻す用）
+  let showCardErrors=false; // 「この内容で建てる」を押したあとだけtrueにし、未回答カードを目立たせる
+
+  // ---- 声で入力（仮・2026-10-07追加） ----
+  let voiceMode='real'; // real/iphone/nospeech/notallowed/noapi（上のトグルで切り替え）
+  let recognizing=false;
+  let recognitionInstance=null;
+  let voiceFinalizedCount=0;
+  const voiceBtn=document.getElementById('voice-btn');
+  const voiceBtnLabel=document.getElementById('voice-btn-label');
+  const voiceListeningIndicator=document.getElementById('voice-listening-indicator');
+  const voiceInterim=document.getElementById('voice-interim');
+  const voiceInterimText=document.getElementById('voice-interim-text');
+  const voiceErrorEl=document.getElementById('voice-error');
+  const voiceIphoneCard=document.getElementById('voice-iphone-card');
+  function getSpeechRecognitionCtor(){
+    return window.SpeechRecognition||window.webkitSpeechRecognition||null;
+  }
+  function voiceShowError(msg){voiceErrorEl.textContent=msg;voiceErrorEl.hidden=false;}
+  function voiceClearError(){voiceErrorEl.hidden=true;}
+  function voiceSetListening(on){
+    recognizing=on;
+    voiceBtnLabel.textContent=on?'止める（仮）':'声で入力（仮）';
+    voiceListeningIndicator.hidden=!on;
+  }
+  function stopVoiceRecognition(){
+    if(recognitionInstance){try{recognitionInstance.stop();}catch(e){}}
+  }
+  function startVoiceRecognition(){
+    const Ctor=getSpeechRecognitionCtor();
+    if(!Ctor){voiceShowError('このブラウザでは、このボタンでは声を入力できません。キーボードにマイクのマークがあれば、そちらから話せます（仮）');return;}
+    try{
+      voiceFinalizedCount=0;
+      recognitionInstance=new Ctor();
+      recognitionInstance.lang='ja-JP';
+      recognitionInstance.interimResults=true;
+      recognitionInstance.continuous=true;
+      recognitionInstance.onresult=(e)=>{
+        let interim='';
+        for(let i=0;i<e.results.length;i++){
+          const res=e.results[i];
+          if(res.isFinal){
+            if(i>=voiceFinalizedCount){npInput.value+=res[0].transcript;voiceFinalizedCount=i+1;}
+          }else{interim+=res[0].transcript;}
+        }
+        if(interim){voiceInterimText.textContent=interim;voiceInterim.hidden=false;}
+        else{voiceInterim.hidden=true;}
+      };
+      recognitionInstance.onerror=(e)=>{
+        const map={
+          'not-allowed':'マイクが使えません。ブラウザの設定でマイクを許可してください（仮）',
+          'service-not-allowed':'マイクが使えません。ブラウザの設定でマイクを許可してください（仮）',
+          'no-speech':'声が聞き取れませんでした。もう一度押して話してください（仮）',
+          'audio-capture':'マイクが見つかりません（仮）',
+          'network':'通信できなかったため、声を文字にできませんでした（仮）'
+        };
+        voiceShowError(map[e.error]||'声を文字にできませんでした（仮）');
+      };
+      recognitionInstance.onend=()=>{voiceSetListening(false);voiceInterim.hidden=true;};
+      recognitionInstance.start();
+      voiceSetListening(true);
+    }catch(err){voiceShowError('声を文字にできませんでした（仮）');}
+  }
+  function resetVoiceUI(){
+    if(recognizing)stopVoiceRecognition();
+    voiceSetListening(false);
+    voiceInterim.hidden=true;
+    voiceClearError();
+    voiceIphoneCard.hidden=true;
+  }
+  document.querySelectorAll('.voice-mode-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('.voice-mode-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      voiceMode=btn.dataset.voicemode;
+      resetVoiceUI();
+    });
+  });
+  voiceBtn.addEventListener('click',()=>{
+    voiceClearError();
+    voiceIphoneCard.hidden=true;
+    if(voiceMode==='iphone'){voiceIphoneCard.hidden=false;npInput.focus();return;}
+    if(voiceMode==='nospeech'){voiceShowError('声が聞き取れませんでした。もう一度押して話してください（仮）');return;}
+    if(voiceMode==='notallowed'){voiceShowError('マイクが使えません。ブラウザの設定でマイクを許可してください（仮）');return;}
+    if(voiceMode==='noapi'){voiceShowError('このブラウザでは、このボタンでは声を入力できません。キーボードにマイクのマークがあれば、そちらから話せます（仮）');return;}
+    if(voiceMode==='real'&&location.protocol==='file:'){voiceShowError('ファイルを直接開いた形では、声を試せません（Chromeの決まりです）。ネコノテに「声のモックを開いて」と言ってください。出てきたURLをChromeで開くと試せます（この表示はモックだけのものです）');return;}
+    if(recognizing){stopVoiceRecognition();return;}
+    startVoiceRecognition();
+  });
+
+  // ---- AIが別々のプロジェクトに分ける（仮・2026-10-07追加） ----
+  function splitFragments(text){
+    // 分けた破片の先頭・末尾に残る句読点・空白（、。,　半角/全角スペース）を取り除く
+    return text.split(/\n|。|、あと|あと、|それと|それから/)
+      .map(s=>s.trim().replace(/^[、。,　\s]+|[、。,　\s]+$/g,''))
+      .filter(s=>s.length>0).slice(0,5);
+  }
+  function makeCard(name){
+    return {
+      id:'npc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
+      name:name,
+      dueValue:'',
+      dueNone:false,
+      reallyAnswer:'',
+      tasks:dummySeed.map((x,i)=>({...x,id:'npc-t-'+i+'-'+Math.random().toString(36).slice(2,7)}))
+    };
+  }
+  function cardIsIncomplete(card){
+    const dueOk=card.dueNone||!!card.dueValue;
+    const reallyOk=!!card.reallyAnswer;
+    return !(dueOk&&reallyOk);
+  }
+  function updateCreateBtnLabel(){
+    npCreateBtn.textContent='この内容で建てる（'+npCards.length+'件）';
+  }
+  function renderResultHead(){
+    if(npCards.length>=2){npResultTitle.textContent='（仮）AIが'+npCards.length+'つに分けました';}
+    else{npResultTitle.textContent='この見本では、何を書いても下の3件が出ます。消すボタンで試せます。';}
+    if(lastSplitCards){npMergeBtn.textContent='やっぱり分ける（仮）';npMergeBtn.hidden=false;}
+    else if(npCards.length>=2){npMergeBtn.textContent='分けずに1つにまとめる（仮）';npMergeBtn.hidden=false;}
+    else{npMergeBtn.hidden=true;}
+  }
+  function renderCards(){
+    npCardsWrap.innerHTML='';
+    npCards.forEach(card=>{
+      const incomplete=cardIsIncomplete(card);
+      const zero=card.tasks.length===0;
+      const div=document.createElement('div');
+      div.className='npcard'+((showCardErrors&&incomplete)?' npcard-invalid':'');
+
+      const nameLabel=document.createElement('p');nameLabel.className='npcard-label';nameLabel.textContent='プロジェクトの名前（仮）';
+      div.appendChild(nameLabel);
+      const nameInput=document.createElement('input');
+      nameInput.type='text';nameInput.className='npcard-name';nameInput.value=card.name;
+      nameInput.setAttribute('aria-label','プロジェクト名');
+      nameInput.addEventListener('input',()=>{card.name=nameInput.value;});
+      div.appendChild(nameInput);
+
+      const dueField=document.createElement('div');dueField.className='npcard-field';
+      const dueLabel=document.createElement('p');dueLabel.className='npcard-label';dueLabel.textContent='期限はありますか？';
+      dueField.appendChild(dueLabel);
+      if(showCardErrors&&!(card.dueNone||card.dueValue)){
+        const dueHint=document.createElement('p');dueHint.className='npcard-hint';dueHint.textContent='ここに答えてください（仮）';
+        dueField.appendChild(dueHint);
+      }
+      const dueRow=document.createElement('div');dueRow.className='npcard-due-row';
+      const dateInput=document.createElement('input');
+      dateInput.type='date';dateInput.className='npcard-date';
+      dateInput.value=card.dueNone?'':card.dueValue;
+      dateInput.disabled=card.dueNone;
+      const noneBtn=document.createElement('button');
+      noneBtn.type='button';noneBtn.className='btn npcard-choice'+(card.dueNone?'':' is-off');noneBtn.textContent='なし';
+      dateInput.addEventListener('input',()=>{
+        card.dueValue=dateInput.value;card.dueNone=false;
+        noneBtn.classList.add('is-off');dateInput.disabled=false;
+      });
+      noneBtn.addEventListener('click',()=>{
+        card.dueNone=!card.dueNone;
+        if(card.dueNone){card.dueValue='';dateInput.value='';}
+        dateInput.disabled=card.dueNone;
+        noneBtn.classList.toggle('is-off',!card.dueNone);
+      });
+      dueRow.appendChild(dateInput);dueRow.appendChild(noneBtn);
+      dueField.appendChild(dueRow);
+      div.appendChild(dueField);
+
+      const reallyField=document.createElement('div');reallyField.className='npcard-field';
+      const reallyLabel=document.createElement('p');reallyLabel.className='npcard-label';reallyLabel.textContent='ホントにやる？（仮）';
+      reallyField.appendChild(reallyLabel);
+      if(showCardErrors&&!card.reallyAnswer){
+        const reallyHint=document.createElement('p');reallyHint.className='npcard-hint';reallyHint.textContent='ここに答えてください（仮）';
+        reallyField.appendChild(reallyHint);
+      }
+      const reallyRow=document.createElement('div');reallyRow.className='npcard-really-row';
+      REALLY_DOING_OPTIONS_DEMO.forEach(opt=>{
+        const b=document.createElement('button');
+        b.type='button';b.className='btn npcard-choice'+(card.reallyAnswer===opt?'':' is-off');b.textContent=opt;
+        b.addEventListener('click',()=>{card.reallyAnswer=opt;renderCards();});
+        reallyRow.appendChild(b);
+      });
+      reallyField.appendChild(reallyRow);
+      if(card.reallyAnswer==='やらない'){
+        const note=document.createElement('p');note.className='npcard-note';note.textContent='（仮）この扱いは仕様書で決めます';
+        reallyField.appendChild(note);
+      }
+      div.appendChild(reallyField);
+
+      const taskField=document.createElement('div');taskField.className='npcard-field';
+      const taskLabel=document.createElement('p');taskLabel.className='npcard-label';taskLabel.textContent='小さなタスク';
+      taskField.appendChild(taskLabel);
+      const ul=document.createElement('ul');ul.className='breakdown-list';
+      card.tasks.forEach(item=>{
+        const li=document.createElement('li');li.className='breakdown-item';
+        li.innerHTML=`<span>${item.label}</span>`;
+        const rb=document.createElement('button');rb.type='button';rb.className='breakdown-remove';rb.textContent='消す';
+        rb.addEventListener('click',()=>{card.tasks=card.tasks.filter(x=>x.id!==item.id);renderCards();});
+        li.appendChild(rb);ul.appendChild(li);
+      });
+      taskField.appendChild(ul);
+      if(showCardErrors&&zero){
+        const zeroMsg=document.createElement('p');zeroMsg.className='msg';
+        zeroMsg.textContent='小さなタスクが0件です。ひとつも無いと区画を作れません。';
+        taskField.appendChild(zeroMsg);
+      }
+      div.appendChild(taskField);
+
+      const removeBtn=document.createElement('button');
+      removeBtn.type='button';removeBtn.className='btn npcard-remove-btn';removeBtn.textContent='このプロジェクトは作らない（仮）';
+      removeBtn.addEventListener('click',()=>{
+        npCards=npCards.filter(c=>c.id!==card.id);
+        renderResultHead();renderCards();
+      });
+      div.appendChild(removeBtn);
+
+      npCardsWrap.appendChild(div);
+    });
+    updateCreateBtnLabel();
+  }
+  npMergeBtn.addEventListener('click',()=>{
+    if(lastSplitCards){npCards=lastSplitCards;lastSplitCards=null;}
+    else{lastSplitCards=npCards;npCards=[makeCard(npInput.value.trim())];}
+    showCardErrors=false;npIncompleteErr.hidden=true;npNoneErr.hidden=true;
+    renderResultHead();renderCards();
+  });
+  function openNewproj(){
+    npInput.value='';npEmptyErr.hidden=true;npResult.hidden=true;npSuccess.hidden=true;
+    npCards=[];lastSplitCards=null;showCardErrors=false;
+    npIncompleteErr.hidden=true;npNoneErr.hidden=true;
+    resetVoiceUI();
+    newprojModal.hidden=false;
+  }
+  document.getElementById('mobile-newproj-btn').addEventListener('click',openNewproj);
+  document.getElementById('pc-newproj-btn').addEventListener('click',openNewproj);
+  document.getElementById('newproj-close-btn').addEventListener('click',()=>{resetVoiceUI();newprojModal.hidden=true});
+  document.getElementById('newproj-sample-btn').addEventListener('click',()=>{
+    npInput.value='請求書を出す、あとリユース会の連絡、それと来週のイベントの準備';
+  });
+  document.getElementById('newproj-breakdown-btn').addEventListener('click',()=>{
+    if(!npInput.value.trim()){npEmptyErr.hidden=false;npResult.hidden=true;return;}
+    npEmptyErr.hidden=true;
+    const fragments=splitFragments(npInput.value);
+    npCards=fragments.map(makeCard);
+    lastSplitCards=null;showCardErrors=false;
+    npIncompleteErr.hidden=true;npNoneErr.hidden=true;npSuccess.hidden=true;
+    renderResultHead();renderCards();npResult.hidden=false;
+  });
+  npCreateBtn.addEventListener('click',()=>{
+    if(npCards.length===0){npNoneErr.hidden=false;npIncompleteErr.hidden=true;return;}
+    npNoneErr.hidden=true;
+    showCardErrors=true;
+    const incomplete=npCards.some(cardIsIncomplete);
+    const zero=npCards.some(c=>c.tasks.length===0);
+    renderCards();
+    npIncompleteErr.hidden=!incomplete;
+    if(incomplete||zero)return;
+    const stamp=Date.now();
+    const createdBlocks=npCards.map((card,i)=>({
+      id:'proj-'+stamp+'-'+i,
+      name:(card.name.trim()||'新しいプロジェクト')+'（仮）',
+      plots:card.tasks.map((t,j)=>({id:t.id+'-'+stamp+'-'+i+'-'+j,label:t.label,state:'empty',imp:t.imp,urg:t.urg}))
+    }));
+    createdBlocks.forEach(b=>blocks.push(b));
+    renderAll();
+    npSuccess.hidden=false;
+    document.getElementById('newproj-success-text').textContent=createdBlocks.length>=2
+      ?createdBlocks.length+'件のプロジェクトを地図に作りました。'
+      :'「'+createdBlocks[0].name+'」の街区を地図に作りました。';
+    npResult.hidden=true;
+  });
+
+  // ======== モード・タブ・まとめ描画 ========
+  const panelMap=buildMapRoot();
+  const panelQuadrant=buildQuadrantRoot();
+  const panelList=buildListRoot();
+  let currentMode='mobile',currentTab='map';
+
+  function mountPanels(){
+    [panelMap,panelQuadrant,panelList].forEach(p=>p.remove());
+    if(currentMode==='mobile'){
+      const target={map:panelMap,quadrant:panelQuadrant,list:panelList}[currentTab];
+      document.getElementById('mobile-panel-slot').appendChild(target);
+    }else{
+      document.getElementById('pc-slot-map').appendChild(panelMap);
+      document.getElementById('pc-slot-quadrant').appendChild(panelQuadrant);
+      document.getElementById('pc-slot-list').appendChild(panelList);
+    }
+    mapNeedsRefit=true;
+  }
+  function mapIsVisible(){return currentMode==='pc'||currentTab==='map';}
+  function renderAll(){
+    renderMapInto(panelMap);
+    renderQuadrantInto(panelQuadrant);
+    renderListInto(panelList);
+    if(mapIsVisible()){
+      if(mapNeedsRefit){fitMapToViewport(panelMap);mapNeedsRefit=false;}
+      applyIsoTransform(panelMap);
+    }
+    renderBubblePanel();
+  }
+
+  document.querySelectorAll('.bubble-mode-btn').forEach(btn=>btn.addEventListener('click',()=>{
+    document.querySelectorAll('.bubble-mode-btn').forEach(b=>b.classList.toggle('active',b===btn));
+    bubbleMode=btn.dataset.bubble;
+    hidePopover();
+    selection=null; // 出し方を切り替えたら選択状態をリセットして混乱を避ける
+    renderAll();
+  }));
+  document.querySelectorAll('.mode-btn').forEach(btn=>btn.addEventListener('click',()=>{
+    document.querySelectorAll('.mode-btn').forEach(b=>b.classList.toggle('active',b===btn));
+    currentMode=btn.dataset.mode;
+    document.getElementById('mobile-wrap').hidden=(currentMode!=='mobile');
+    document.getElementById('pc-wrap').hidden=(currentMode!=='pc');
+    mountPanels();
+    requestAnimationFrame(renderAll);
+  }));
+  document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b===btn));
+    currentTab=btn.dataset.tab;
+    mountPanels();
+    requestAnimationFrame(renderAll);
+  }));
+  document.getElementById('home-open-btn').addEventListener('click',()=>{
+    document.getElementById('demo-home').classList.remove('active');
+    document.getElementById('demo-hub').classList.add('active');
+    mountPanels();
+    requestAnimationFrame(renderAll);
+  });
+  document.getElementById('hub-home-btn').addEventListener('click',()=>{
+    document.getElementById('demo-hub').classList.remove('active');
+    document.getElementById('demo-home').classList.add('active');
+  });
+
+  // 初回の組み立て・計測は、ホーム画面から開いたとき／PCに切り替えたときに行う
+  // （非表示のままだと clientWidth が測れず初期倍率が狙いどおりにならないため）
+})();
+</script>
+</body>
+</html>
