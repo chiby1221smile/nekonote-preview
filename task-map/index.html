@@ -414,6 +414,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
         <p class="muted" id="newproj-result-title" style="margin:10px 0 6px"></p>
         <button class="btn npcard-choice" type="button" id="newproj-merge-toggle-btn" hidden>分けずに1つにまとめる（仮）</button>
       </div>
+      <p class="muted" style="font-size:11px;margin:0 0 8px">（仮）この見本は「、」などの区切りで分けます。本番はAIが内容を読んで分けます</p>
       <div id="newproj-cards"></div>
       <p class="msg" id="newproj-incomplete-error" hidden>期限と「ホントにやる？」に答えていないプロジェクトがあります（仮）</p>
       <p class="msg" id="newproj-none-error" hidden>作るプロジェクトがありません（仮）</p>
@@ -1947,11 +1948,16 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   let lastSplitCards=null; // 「分けずに1つにまとめる」前の状態（「やっぱり分ける」で戻す用）
   let showCardErrors=false; // 「この内容で建てる」を押したあとだけtrueにし、未回答カードを目立たせる
 
-  // ---- 声で入力（仮・2026-10-07追加） ----
+  // ---- 声で入力（仮・2026-10-07追加。同日夜にAndroidの実機不具合2件を直した） ----
   let voiceMode='real'; // real/iphone/nospeech/notallowed/noapi（上のトグルで切り替え）
   let recognizing=false;
   let recognitionInstance=null;
-  let voiceFinalizedCount=0;
+  let sessionText=''; // 今の1回（start〜end）で確定した文字をまとめたもの
+  let sessionHadFinal=false; // 今の1回で何か確定したか（②黙っていた、の判定に使う）
+  let userStopped=false; // 「止める」を押した・モーダルを閉じた等で、自動の聞き直しをやめるべきか
+  let hardErrorStop=false; // not-allowed等のエラーで、自動の聞き直しをやめるべきか
+  let voiceRestartCount=0; // 自動で聞き直した回数（④30回で打ち切り）
+  const VOICE_RESTART_LIMIT=30;
   const voiceBtn=document.getElementById('voice-btn');
   const voiceBtnLabel=document.getElementById('voice-btn-label');
   const voiceListeningIndicator=document.getElementById('voice-listening-indicator');
@@ -1972,42 +1978,78 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   function stopVoiceRecognition(){
     if(recognitionInstance){try{recognitionInstance.stop();}catch(e){}}
   }
+  // 届いた文字を「前の文字で始まっていたら置き換え、そうでなければ足す」でまとめる
+  // （Androidの累積した確定結果と、PCの区切られた確定結果の両方に効く）
+  function mergeVoiceText(acc,text){
+    if(!text)return acc;
+    if(!acc)return text;
+    if(acc.indexOf(text)===0)return acc;
+    if(text.indexOf(acc)===0)return text;
+    return acc+text;
+  }
+  // 今回確定した文字（sessionText）を入力欄の末尾に足す。末尾が読点・句点でなければ「、」を挟む
+  function appendVoiceSessionText(){
+    if(!sessionText)return;
+    const cur=npInput.value;
+    if(cur&&!/[、。]$/.test(cur)){npInput.value=cur+'、'+sessionText;}
+    else{npInput.value=cur+sessionText;}
+  }
   function startVoiceRecognition(){
     const Ctor=getSpeechRecognitionCtor();
-    if(!Ctor){voiceShowError('このブラウザでは、このボタンでは声を入力できません。キーボードにマイクのマークがあれば、そちらから話せます（仮）');return;}
+    if(!Ctor){voiceShowError('このブラウザでは、このボタンでは声を入力できません。キーボードにマイクのマークがあれば、そちらから話せます（仮）');voiceSetListening(false);return;}
     try{
-      voiceFinalizedCount=0;
+      sessionText='';
+      sessionHadFinal=false;
+      hardErrorStop=false;
       recognitionInstance=new Ctor();
       recognitionInstance.lang='ja-JP';
       recognitionInstance.interimResults=true;
-      recognitionInstance.continuous=true;
+      recognitionInstance.continuous=false;
       recognitionInstance.onresult=(e)=>{
-        let interim='';
+        // Androidはonresultのたびにe.resultsへその回の結果が全部（まとめ済みのものも重複して）入って届くことがあるため、
+        // 毎回i=0からまっさらに作り直す（sessionTextへの足し込みはしない）
+        let fin='',interim='';
         for(let i=0;i<e.results.length;i++){
-          const res=e.results[i];
-          if(res.isFinal){
-            if(i>=voiceFinalizedCount){npInput.value+=res[0].transcript;voiceFinalizedCount=i+1;}
-          }else{interim+=res[0].transcript;}
+          const text=e.results[i][0].transcript;
+          if(e.results[i].isFinal){fin=mergeVoiceText(fin,text);}
+          else{interim=mergeVoiceText(interim,text);}
         }
+        if(fin){sessionText=fin;sessionHadFinal=true;}
         if(interim){voiceInterimText.textContent=interim;voiceInterim.hidden=false;}
         else{voiceInterim.hidden=true;}
       };
       recognitionInstance.onerror=(e)=>{
+        // no-speech・abortedは②（黙っていた）と同じ扱いにするので、ここではエラー表示を出さない（onendに任せる）
+        if(e.error==='no-speech'||e.error==='aborted')return;
         const map={
           'not-allowed':'マイクが使えません。ブラウザの設定でマイクを許可してください（仮）',
           'service-not-allowed':'マイクが使えません。ブラウザの設定でマイクを許可してください（仮）',
-          'no-speech':'声が聞き取れませんでした。もう一度押して話してください（仮）',
           'audio-capture':'マイクが見つかりません（仮）',
           'network':'通信できなかったため、声を文字にできませんでした（仮）'
         };
+        hardErrorStop=true;
         voiceShowError(map[e.error]||'声を文字にできませんでした（仮）');
       };
-      recognitionInstance.onend=()=>{voiceSetListening(false);voiceInterim.hidden=true;};
+      recognitionInstance.onend=()=>{
+        voiceInterim.hidden=true;
+        appendVoiceSessionText();
+        if(userStopped||hardErrorStop){voiceSetListening(false);return;}
+        if(!sessionHadFinal){
+          // ②何も確定しなかった（黙っていた・no-speech・aborted）。1文字でも入っていれば静かに待機に戻る
+          if(!npInput.value){voiceShowError('声が聞き取れませんでした。もう一度押して話してください（仮）');}
+          voiceSetListening(false);
+          return;
+        }
+        if(voiceRestartCount>=VOICE_RESTART_LIMIT){voiceSetListening(false);return;}
+        voiceRestartCount++;
+        startVoiceRecognition(); // ④まだ止めていなければ、自動でもう一度聞き始める（新しいインスタンス）
+      };
       recognitionInstance.start();
       voiceSetListening(true);
-    }catch(err){voiceShowError('声を文字にできませんでした（仮）');}
+    }catch(err){voiceShowError('声を文字にできませんでした（仮）');voiceSetListening(false);}
   }
   function resetVoiceUI(){
+    userStopped=true; // 自動の聞き直しを止める（モーダルを閉じる・開き直す・試し方の切り替え時）
     if(recognizing)stopVoiceRecognition();
     voiceSetListening(false);
     voiceInterim.hidden=true;
@@ -2030,14 +2072,16 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     if(voiceMode==='notallowed'){voiceShowError('マイクが使えません。ブラウザの設定でマイクを許可してください（仮）');return;}
     if(voiceMode==='noapi'){voiceShowError('このブラウザでは、このボタンでは声を入力できません。キーボードにマイクのマークがあれば、そちらから話せます（仮）');return;}
     if(voiceMode==='real'&&location.protocol==='file:'){voiceShowError('ファイルを直接開いた形では、声を試せません（Chromeの決まりです）。https://chiby1221smile.github.io/nekonote-preview/task-map/ をChromeで開くと試せます（この表示はモックだけのものです）');return;}
-    if(recognizing){stopVoiceRecognition();return;}
+    if(recognizing){userStopped=true;stopVoiceRecognition();return;}
+    userStopped=false;voiceRestartCount=0;
     startVoiceRecognition();
   });
 
   // ---- AIが別々のプロジェクトに分ける（仮・2026-10-07追加） ----
   function splitFragments(text){
     // 分けた破片の先頭・末尾に残る句読点・空白（、。,　半角/全角スペース）を取り除く
-    return text.split(/\n|。|、あと|あと、|それと|それから/)
+    // 声は「、」だけでつながることが多いので、区切りの最後に裸の「、」も追加（長い区切りを先に試すよう末尾に置く）
+    return text.split(/\n|。|、あと|あと、|それと|それから|、/)
       .map(s=>s.trim().replace(/^[、。,　\s]+|[、。,　\s]+$/g,''))
       .filter(s=>s.length>0).slice(0,5);
   }
