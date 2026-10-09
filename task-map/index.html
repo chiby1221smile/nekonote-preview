@@ -243,7 +243,6 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
 .voice-listening-banner{display:flex;align-items:center;gap:8px;margin-top:8px;padding:10px 12px;border-left:3px solid var(--red-dark);background:var(--light-red);color:var(--ink);font-weight:700;font-size:13px}
 .voice-listening-banner-icon{flex:none;animation:voice-blink 1s step-start infinite}
 @keyframes voice-blink{50%{opacity:.25}}
-.voice-interim{margin:6px 0 0;font-size:12px;color:var(--sub)}
 .voice-iphone-card{margin-top:10px;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:10px 12px}
 .voice-iphone-text{margin:0 0 8px;font-size:13px;color:var(--ink)}
 .voice-iphone-text-sub{margin:8px 0 0;font-size:12px;color:var(--sub)}
@@ -395,7 +394,6 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
         <span id="voice-btn-label">声で入力（仮）</span>
       </button>
     </div>
-    <p class="voice-interim" id="voice-interim" hidden>聞き取り中：<span id="voice-interim-text"></span>（仮）</p>
     <p class="msg" id="voice-error" hidden></p>
     <div class="voice-iphone-card" id="voice-iphone-card" hidden>
       <p class="voice-iphone-text">キーボードにあるマイクのマーク（右下あたり）を押して話してください（仮）</p>
@@ -1978,6 +1976,8 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   let voiceRestartCount=0; // 自動で聞き直した回数（④30回で打ち切り）
   let voiceStopFallbackTimer=null; // ②stop()を呼んでもendが来ないときの保険（1.5秒）
   let voiceSilenceTimer=null; // ③8秒なにも届かないときの保険
+  let sessionBaseValue=''; // 今の1回を始めたときの入力欄の文字（話している途中の表示の土台）
+  let voiceFinishCallback=null; // 声が終わったら1回だけ呼ぶ処理（分解してもらう、を先に押したときなど）
   const VOICE_RESTART_LIMIT=30;
   const VOICE_STOP_FALLBACK_MS=1500;
   const VOICE_SILENCE_MS=8000;
@@ -1986,8 +1986,6 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   const voiceBtnIconMic=document.getElementById('voice-btn-icon-mic');
   const voiceBtnIconStop=document.getElementById('voice-btn-icon-stop');
   const voiceListeningBanner=document.getElementById('voice-listening-banner');
-  const voiceInterim=document.getElementById('voice-interim');
-  const voiceInterimText=document.getElementById('voice-interim-text');
   const voiceErrorEl=document.getElementById('voice-error');
   const voiceIphoneCard=document.getElementById('voice-iphone-card');
   const voiceLogPre=document.getElementById('voice-log-pre');
@@ -2003,6 +2001,16 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     voiceBtnIconMic.toggleAttribute('hidden',on);
     voiceBtnIconStop.toggleAttribute('hidden',!on);
     voiceListeningBanner.hidden=!on;
+    npInput.readOnly=on; // 打った文字と声がぶつからないように、聞いている間は読み取り専用にする
+  }
+  // 聞いている間の待機状態に戻す。声が終わったら1回だけ呼ぶ処理が溜まっていればここで呼ぶ
+  function voiceGoIdle(){
+    voiceSetListening(false);
+    if(voiceFinishCallback){
+      const cb=voiceFinishCallback;
+      voiceFinishCallback=null;
+      cb();
+    }
   }
   function stopVoiceRecognition(){
     if(recognitionInstance){try{recognitionInstance.stop();}catch(e){}}
@@ -2036,14 +2044,14 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     if(text.indexOf(acc)===0)return text;
     return acc+text;
   }
-  // 今回確定した文字（sessionText）に、まだ確定していない最新の文字（sessionInterim）もまとめて
-  // 入力欄の末尾に足す（①Safari対策：確定の印が付かない文字も取りこぼさない）
-  function appendVoiceSessionText(){
+  // 確定した文字（sessionText）とまだ確定していない最新の文字（sessionInterim）をまとめて、
+  // 「元の文字（sessionBaseValue）」のあとに書き直す。話している途中も、終わったときもこれを呼ぶ
+  // （同じ形で書き直すだけなので、何度呼んでも二重には足されない）
+  function renderVoiceInputLive(){
     const combined=mergeVoiceText(sessionText,sessionInterim);
-    if(!combined)return;
-    const cur=npInput.value;
-    if(cur&&!/[、。]$/.test(cur)){npInput.value=cur+'、'+combined;}
-    else{npInput.value=cur+combined;}
+    if(!combined){npInput.value=sessionBaseValue;return;}
+    if(sessionBaseValue&&!/[、。]$/.test(sessionBaseValue)){npInput.value=sessionBaseValue+'、'+combined;}
+    else{npInput.value=sessionBaseValue+combined;}
   }
   // ③聞いている間、startとonresultのたびに掛け直すタイマー。8秒なにも届かなければ「終わる」と同じ扱いで止める
   function resetVoiceSilenceTimer(){
@@ -2071,19 +2079,18 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     sessionHandled=true;
     clearTimeout(voiceSilenceTimer);
     clearTimeout(voiceStopFallbackTimer);
-    voiceInterim.hidden=true;
     const hadAny=sessionHadFinal||!!sessionInterim;
-    appendVoiceSessionText();
+    renderVoiceInputLive(); // 話している途中と同じ形で、最後にもう一度書き直して確定させる
     if(!viaFallback)voiceLogAdd('end');
     if(viaFallback){try{recognitionInstance.abort();}catch(e){}}
-    if(userStopped||hardErrorStop){voiceSetListening(false);return;}
+    if(userStopped||hardErrorStop){voiceGoIdle();return;}
     if(!hadAny){
       // ②何も確定・途中も届かなかった（黙っていた・no-speech・aborted）。1文字でも入っていれば静かに待機に戻る
       if(!npInput.value){voiceShowError('声が聞き取れませんでした。もう一度押して話してください（仮）');}
-      voiceSetListening(false);
+      voiceGoIdle();
       return;
     }
-    if(voiceRestartCount>=VOICE_RESTART_LIMIT){voiceSetListening(false);return;}
+    if(voiceRestartCount>=VOICE_RESTART_LIMIT){voiceGoIdle();return;}
     voiceRestartCount++;
     voiceLogAdd('自動で聞き直す #'+voiceRestartCount);
     startVoiceRecognition(); // ④まだ止めていなければ、自動でもう一度聞き始める（新しいインスタンス）
@@ -2097,6 +2104,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       sessionHadFinal=false;
       sessionHandled=false;
       hardErrorStop=false;
+      sessionBaseValue=npInput.value; // この回を始めたときの入力欄の文字を土台として覚えておく
       recognitionInstance=new Ctor();
       recognitionInstance.lang='ja-JP';
       recognitionInstance.interimResults=true;
@@ -2114,8 +2122,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
         }
         if(fin){sessionText=fin;sessionHadFinal=true;}
         sessionInterim=interim; // ①Safariは確定しないまま届くことがあるので、毎回その回の最新として持っておく
-        if(interim){voiceInterimText.textContent=interim;voiceInterim.hidden=false;}
-        else{voiceInterim.hidden=true;}
+        renderVoiceInputLive(); // 話している途中の文字も、その場で入力欄に書き直す
       };
       recognitionInstance.onerror=(e)=>{
         voiceLogAdd('error: '+e.error);
@@ -2139,11 +2146,11 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   }
   function resetVoiceUI(){
     userStopped=true; // 自動の聞き直しを止める（モーダルを閉じる・開き直す・試し方の切り替え時）
+    voiceFinishCallback=null; // 保留中だった「終わったら呼ぶ処理」も消す（別のモードに切り替わるため）
     clearTimeout(voiceSilenceTimer);
     clearTimeout(voiceStopFallbackTimer);
     if(recognizing)stopVoiceRecognition();
     voiceSetListening(false);
-    voiceInterim.hidden=true;
     voiceClearError();
     voiceIphoneCard.hidden=true;
   }
@@ -2173,12 +2180,17 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   });
 
   // ---- AIが別々のプロジェクトに分ける（仮・2026-10-07追加） ----
+  // 作業を表す言葉の一覧（splitFragments・splitCardNameで共通）。このあとの「と」も区切りにする
+  const VOICE_SPLIT_AFTER_WORDS=['更新','確認','連絡','準備','作成','対応','整理','提出','送付','返信','予約','修正','発送','申請','支払い','振込','請求','見積もり','打ち合わせ','掃除','片付け','買い物','手続き','登録','設定','調整','相談','報告','印刷','投稿','記録','チェック'];
+  const VOICE_SPLIT_AFTER_WORD_TO_SRC='(?<='+VOICE_SPLIT_AFTER_WORDS.join('|')+')と(?![のをはがにでもやか])';
   function splitFragments(text){
     // 分けた破片の先頭・末尾に残る句読点・空白（、。,　半角/全角スペース）を取り除く
     // 声は「、」だけでつながることが多いので、区切りの最後に裸の「、」も追加（長い区切りを先に試すよう末尾に置く）
     // 「等」も区切りにする。ただし直後が助詞（の・を・は・が・に・で・と・も・や）のときは区切らない（「書類等の整理」対策）
-    return text.split(/\n|。|、あと|あと、|それと|それから|、|等(?![のをはがにでともや])/)
-      .map(s=>s.trim().replace(/^[、。,　\s]+|[、。,　\s]+$/g,''))
+    // 「とあと」も区切りにする。作業を表す言葉（VOICE_SPLIT_AFTER_WORDS）のあとの「と」も区切りにする
+    // （直後に助詞の・を・は・が・に・で・も・や・かが続くときは区切らない。「とあと」を先に試すよう前に置く）
+    return text.split(new RegExp('\\n|。|、あと|あと、|それと|それから|とあと|、|等(?![のをはがにでともや])|'+VOICE_SPLIT_AFTER_WORD_TO_SRC))
+      .map(s=>s.trim().replace(/^[、。,　\s]+|(?:と|あと|[、。,　\s])+$/g,''))
       .filter(s=>s.length>0).slice(0,5);
   }
   function freshDummyTasks(){
@@ -2195,9 +2207,12 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       tasks:freshDummyTasks()
     };
   }
-  // カードの名前を空白（半角・全角）・「、」・「。」・「等」（直後が助詞のときは除く）で分ける（「分ける（仮）」ボタン用）
+  // カードの名前を空白（半角・全角）・「、」・「。」・「等」・「とあと」・作業を表す言葉のあとの「と」で分ける
+  // （直後が助詞のときは除く。「分ける（仮）」ボタン用）
   function splitCardName(name){
-    return name.split(/[\s　、。]+|等(?![のをはがにでともや])/).map(s=>s.trim()).filter(s=>s.length>0);
+    return name.split(new RegExp('[\\s　、。]+|等(?![のをはがにでともや])|とあと|'+VOICE_SPLIT_AFTER_WORD_TO_SRC))
+      .map(s=>s.trim().replace(/(?:と|あと)+$/,''))
+      .filter(s=>s.length>0);
   }
   function focusCardName(cardId){
     const input=npCardsWrap.querySelector('[data-npcard-id="'+cardId+'"] .npcard-name');
@@ -2381,7 +2396,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   document.getElementById('newproj-sample-btn').addEventListener('click',()=>{
     npInput.value='請求書を出す、あとリユース会の連絡、それと来週のイベントの準備';
   });
-  document.getElementById('newproj-breakdown-btn').addEventListener('click',()=>{
+  function runBreakdown(){
     if(!npInput.value.trim()){npEmptyErr.hidden=false;npResult.hidden=true;return;}
     npEmptyErr.hidden=true;
     const fragments=splitFragments(npInput.value);
@@ -2389,6 +2404,16 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     lastSplitCards=null;showCardErrors=false;
     npIncompleteErr.hidden=true;npNoneErr.hidden=true;npSuccess.hidden=true;
     renderResultHead();renderCards();npResult.hidden=false;
+  }
+  document.getElementById('newproj-breakdown-btn').addEventListener('click',()=>{
+    if(recognizing){
+      // 聞いている間は、先に声の入力を終わらせてから分解する（今の区切りまでの文字が全部入ってから1回だけ）
+      voiceFinishCallback=runBreakdown;
+      userStopped=true;
+      requestVoiceStop('「（仮）AIに分解してもらう」を押した（先に声の入力を終わらせる）');
+      return;
+    }
+    runBreakdown();
   });
   npCreateBtn.addEventListener('click',()=>{
     if(npCards.length===0){npNoneErr.hidden=false;npIncompleteErr.hidden=true;return;}
