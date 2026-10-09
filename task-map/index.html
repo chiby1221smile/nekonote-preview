@@ -2093,7 +2093,8 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   function splitFragments(text){
     // 分けた破片の先頭・末尾に残る句読点・空白（、。,　半角/全角スペース）を取り除く
     // 声は「、」だけでつながることが多いので、区切りの最後に裸の「、」も追加（長い区切りを先に試すよう末尾に置く）
-    return text.split(/\n|。|、あと|あと、|それと|それから|、/)
+    // 「等」も区切りにする。ただし直後が助詞（の・を・は・が・に・で・と・も・や）のときは区切らない（「書類等の整理」対策）
+    return text.split(/\n|。|、あと|あと、|それと|それから|、|等(?![のをはがにでともや])/)
       .map(s=>s.trim().replace(/^[、。,　\s]+|[、。,　\s]+$/g,''))
       .filter(s=>s.length>0).slice(0,5);
   }
@@ -2111,9 +2112,9 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       tasks:freshDummyTasks()
     };
   }
-  // カードの名前を空白（半角・全角）・「、」・「。」で分ける（「分ける（仮）」ボタン用）
+  // カードの名前を空白（半角・全角）・「、」・「。」・「等」（直後が助詞のときは除く）で分ける（「分ける（仮）」ボタン用）
   function splitCardName(name){
-    return name.split(/[\s　、。]+/).map(s=>s.trim()).filter(s=>s.length>0);
+    return name.split(/[\s　、。]+|等(?![のをはがにでともや])/).map(s=>s.trim()).filter(s=>s.length>0);
   }
   function focusCardName(cardId){
     const input=npCardsWrap.querySelector('[data-npcard-id="'+cardId+'"] .npcard-name');
