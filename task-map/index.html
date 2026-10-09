@@ -224,7 +224,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
 .pop-neglect{margin:0 0 7px;color:var(--map-neglect-text);font-size:11px}
 .pop-actions{display:flex;gap:6px}
 .modal-overlay{position:fixed;inset:0;background:rgba(35,47,58,.45);display:flex;align-items:center;justify-content:center;z-index:60;padding:16px}
-.modal-box{max-width:360px;width:100%;background:var(--card);border-radius:8px;padding:16px;box-shadow:4px 4px 0 var(--line)}
+.modal-box{max-width:360px;width:100%;background:var(--card);border-radius:8px;padding:16px;box-shadow:4px 4px 0 var(--line);box-sizing:border-box;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;overscroll-behavior:contain}
 .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .modal-head h3{margin:0;font-size:1rem;color:var(--ink)}
 
@@ -269,6 +269,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
 .npcard-really-row{display:flex;gap:6px;flex-wrap:wrap}
 .npcard-note{margin:6px 0 0;font-size:11px;color:var(--sub)}
 .npcard-remove-btn{background:var(--card);border-color:var(--line);color:var(--sub);font-size:12px;padding:6px 10px}
+.npcard-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 /* カード内の小さなタスク一覧（.demo-shellの外なので同名クラスに専用のスタイルを与える） */
 .npcard .breakdown-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .npcard .breakdown-item{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);background:var(--paper);border-radius:5px;padding:8px 10px;font-size:.88rem;color:var(--ink)}
@@ -280,9 +281,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
 <body>
 
 <p class="page-note">
-社内モック（仮）10/4版です。触っても実際のデータには保存されません。<br>
-<b>今回あらたに見てほしいところ：</b><b>10/7追加：</b>⑩「新しいプロジェクトを足す」で「声で入力（仮）」を押して話すと文字が入るか（https://chiby1221smile.github.io/nekonote-preview/task-map/ をChromeで開いたとき。ファイルをダブルクリックで開いた形と、HTMLビューアの中では声は試せません）／上の「声の入力の試し方（仮）」でiPhoneのホーム画面・聞き取れなかった・マイクを許可しなかった・対応していないブラウザの表示を見る　⑪「（仮）例を入れる」→「（仮）AIに分解してもらう」で3つのプロジェクトに分かれるか／「分けずに1つにまとめる」で戻せるか／期限か「ホントにやる？」に答えずに建てるとどう出るか　①上の「吹き出しの出し方（仮）：A／B」を切り替えて、建物・タスクを選んだときの出方を見比べられるか（Aは地図の下／横の固定欄・Bは小さな名札）　②4象限やリストでタスクを選ぶと地図の建物も光るか／地図の建物を選ぶと4象限・リストのそのプロジェクトのタスクが全部光るか（はっきり分かる縁取り・明るさになっているか）　③リストで孫タスクが子タスクの下に一段下がって並び、畳む・開くができるか／子の行の「＋孫（仮）」で孫を増やせるか／4象限にも孫タスクのカードが出て親の子タスク名が小さく添えられているか／地図の「あと○つで完成」が孫がある子は孫の数で数えているか　④「Meetianとつないだ場合（仮）」をオンにして住民を押すと、その人（フルネーム（仮））の残っている約束の一覧が出るか／一覧から1件選ぶと4象限・リストのそのタスクが光るか／「やらない（社交辞令）」を押すとその行が隠れるか（Meetianへは書き戻さないと小さく書いてあるか）　⑤建物を押すとき、地面の小さいひし形を外して建物の絵の部分を押しても選べるか／吹き出しの出し方「B」のとき、名札が押した建物・タスクのすぐ横（入らなければ下）に出るか（画面の左上に飛んでいないか）　⑥完成した建物の種類が増えました（高層ビル・工場）。製作寄りのプロジェクトは工場、物販寄りのプロジェクトはお店、どちらでもなくタスクが多めのプロジェクトは高層ビルになっているか見てください（どれも（仮）で、本番はAIがプロジェクト名とタスクの内容から判断します）。　⑦区画の大きさが建物によって違います（高層ビル・図書館風は4マス、工場・オフィスは庭つきの2マス、それ以外は1マスの（仮））。隣の建物と地面が重なっていないか・庭（木立や公園の絵）が建物の種類に合わせて出ているか見てください。　⑧道路に歩道と縁石を付けました（仮）。マスの境目で道路の模様が切れていないか・街区に面した側に歩道がつながって出ているか見てください。　⑨放置した日数で建物の見た目が変わります（仮・日数はすべて仮）：15日で雑草とくすみ、25日でカラス、40日で火事（炎と煙）になります。該当のプロジェクトでタスクを1つ動かすと元の見た目に戻るか・火事だったものは消防車が来て水をかけ、炎が消えたあと煙も薄くなって消えてから戻るか見てください。<br>
-<b>前回までに確認済み（壊していないか合わせて確認）：</b>道路のつながり・街区の大きさの変化・公園の置き方・完成した建物5種類・地図の色・住民の灯り・「会議が終わった」の工事の車・「Meetianとつながらなかった」の案内・「新しいプロジェクトを足す」の空欄エラーと0件エラー。
+社内モック（仮）です。触っても保存されません。どこを見てほしいかは、山下作業メモに書いてあります。
 </p>
 
 <div class="mode-toggle">
@@ -2098,15 +2097,60 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       .map(s=>s.trim().replace(/^[、。,　\s]+|[、。,　\s]+$/g,''))
       .filter(s=>s.length>0).slice(0,5);
   }
+  function freshDummyTasks(){
+    return dummySeed.map((x,i)=>({...x,id:'npc-t-'+i+'-'+Math.random().toString(36).slice(2,7)}));
+  }
   function makeCard(name){
     return {
       id:'npc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
       name:name,
+      placeholderName:'',
       dueValue:'',
       dueNone:false,
       reallyAnswer:'',
-      tasks:dummySeed.map((x,i)=>({...x,id:'npc-t-'+i+'-'+Math.random().toString(36).slice(2,7)}))
+      tasks:freshDummyTasks()
     };
+  }
+  // カードの名前を空白（半角・全角）・「、」・「。」で分ける（「分ける（仮）」ボタン用）
+  function splitCardName(name){
+    return name.split(/[\s　、。]+/).map(s=>s.trim()).filter(s=>s.length>0);
+  }
+  function focusCardName(cardId){
+    const input=npCardsWrap.querySelector('[data-npcard-id="'+cardId+'"] .npcard-name');
+    if(input)input.focus();
+  }
+  // 「分ける（仮）」：名前の区切りの数だけカードを並べ直す。区切りが無ければ空のカードを1枚下に足す
+  function splitCard(card){
+    const idx=npCards.findIndex(c=>c.id===card.id);
+    if(idx<0)return;
+    const parts=splitCardName(card.name);
+    if(parts.length<=1){
+      const newCard=makeCard('');
+      newCard.placeholderName='分けた方の名前を書いてください（仮）';
+      npCards.splice(idx+1,0,newCard);
+      renderResultHead();renderCards();
+      focusCardName(newCard.id);
+      return;
+    }
+    const newCards=parts.map((part,i)=>{
+      const c=makeCard(part);
+      if(i===0){c.dueValue=card.dueValue;c.dueNone=card.dueNone;c.reallyAnswer=card.reallyAnswer;}
+      return c;
+    });
+    npCards.splice(idx,1,...newCards);
+    renderResultHead();renderCards();
+  }
+  // 「上とまとめる（仮）」：このカードをすぐ上のカードにまとめて、このカードは消える
+  function mergeCardUp(card){
+    const idx=npCards.findIndex(c=>c.id===card.id);
+    if(idx<=0)return;
+    const upper=npCards[idx-1];
+    upper.name=upper.name+'、'+card.name;
+    upper.tasks=upper.tasks.concat(card.tasks);
+    if(!(upper.dueNone||upper.dueValue)){upper.dueValue=card.dueValue;upper.dueNone=card.dueNone;}
+    if(!upper.reallyAnswer){upper.reallyAnswer=card.reallyAnswer;}
+    npCards.splice(idx,1);
+    renderResultHead();renderCards();
   }
   function cardIsIncomplete(card){
     const dueOk=card.dueNone||!!card.dueValue;
@@ -2117,7 +2161,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     npCreateBtn.textContent='この内容で建てる（'+npCards.length+'件）';
   }
   function renderResultHead(){
-    if(npCards.length>=2){npResultTitle.textContent='（仮）AIが'+npCards.length+'つに分けました';}
+    if(npCards.length>=2){npResultTitle.textContent='（仮）'+npCards.length+'つのプロジェクトに分かれています';}
     else{npResultTitle.textContent='この見本では、何を書いても下の3件が出ます。消すボタンで試せます。';}
     if(lastSplitCards){npMergeBtn.textContent='やっぱり分ける（仮）';npMergeBtn.hidden=false;}
     else if(npCards.length>=2){npMergeBtn.textContent='分けずに1つにまとめる（仮）';npMergeBtn.hidden=false;}
@@ -2125,16 +2169,18 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   }
   function renderCards(){
     npCardsWrap.innerHTML='';
-    npCards.forEach(card=>{
+    npCards.forEach((card,idx)=>{
       const incomplete=cardIsIncomplete(card);
       const zero=card.tasks.length===0;
       const div=document.createElement('div');
       div.className='npcard'+((showCardErrors&&incomplete)?' npcard-invalid':'');
+      div.dataset.npcardId=card.id;
 
       const nameLabel=document.createElement('p');nameLabel.className='npcard-label';nameLabel.textContent='プロジェクトの名前（仮）';
       div.appendChild(nameLabel);
       const nameInput=document.createElement('input');
       nameInput.type='text';nameInput.className='npcard-name';nameInput.value=card.name;
+      nameInput.placeholder=card.placeholderName||'';
       nameInput.setAttribute('aria-label','プロジェクト名');
       nameInput.addEventListener('input',()=>{card.name=nameInput.value;});
       div.appendChild(nameInput);
@@ -2207,13 +2253,25 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       }
       div.appendChild(taskField);
 
+      const actions=document.createElement('div');actions.className='npcard-actions';
+      if(idx>0){
+        const mergeUpBtn=document.createElement('button');
+        mergeUpBtn.type='button';mergeUpBtn.className='btn npcard-remove-btn';mergeUpBtn.textContent='上とまとめる（仮）';
+        mergeUpBtn.addEventListener('click',()=>{mergeCardUp(card);});
+        actions.appendChild(mergeUpBtn);
+      }
+      const splitBtn=document.createElement('button');
+      splitBtn.type='button';splitBtn.className='btn npcard-remove-btn';splitBtn.textContent='分ける（仮）';
+      splitBtn.addEventListener('click',()=>{splitCard(card);});
+      actions.appendChild(splitBtn);
       const removeBtn=document.createElement('button');
       removeBtn.type='button';removeBtn.className='btn npcard-remove-btn';removeBtn.textContent='このプロジェクトは作らない（仮）';
       removeBtn.addEventListener('click',()=>{
         npCards=npCards.filter(c=>c.id!==card.id);
         renderResultHead();renderCards();
       });
-      div.appendChild(removeBtn);
+      actions.appendChild(removeBtn);
+      div.appendChild(actions);
 
       npCardsWrap.appendChild(div);
     });
