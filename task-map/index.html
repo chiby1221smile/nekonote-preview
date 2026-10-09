@@ -253,6 +253,10 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
 .voice-iphone-key{flex:1;height:10px;border-radius:2px;background:var(--card);border:1px solid var(--line)}
 .voice-iphone-key-wide{flex:5}
 .voice-iphone-mic-dot{flex:none;width:22px;height:16px;border-radius:8px;background:var(--red);border:1px solid var(--red-dark);display:flex;align-items:center;justify-content:center}
+/* ---- 聞き取りの記録（モックだけ・2026-10-09追加。Safariの届き方を確かめる用） ---- */
+.voice-log-details{margin-top:8px;font-size:11px;color:var(--ink)}
+.voice-log-details summary{cursor:pointer;font-weight:700;color:var(--ink)}
+.voice-log-pre{margin:6px 0;max-height:160px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;background:var(--paper);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:11px;color:var(--ink)}
 
 /* ---- AIがプロジェクトを分ける（仮・2026-10-07追加） ---- */
 .newproj-result-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap}
@@ -410,6 +414,12 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       </div>
       <p class="voice-iphone-text-sub">マイクのマークが無いときは、iPhoneの設定→一般→キーボード→音声入力をオンにします（仮）</p>
     </div>
+
+    <details class="voice-log-details" id="voice-log-details">
+      <summary>（モックだけ）聞き取りの記録</summary>
+      <pre class="voice-log-pre" id="voice-log-pre"></pre>
+      <button type="button" class="btn npcard-remove-btn" id="voice-log-clear-btn">記録を消す</button>
+    </details>
 
     <p class="msg" id="newproj-empty-error" hidden>ここに書いてから押してください。</p>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
@@ -1955,16 +1965,22 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   let lastSplitCards=null; // 「分けずに1つにまとめる」前の状態（「やっぱり分ける」で戻す用）
   let showCardErrors=false; // 「この内容で建てる」を押したあとだけtrueにし、未回答カードを目立たせる
 
-  // ---- 声で入力（仮・2026-10-07追加。同日夜にAndroidの実機不具合2件を直した） ----
+  // ---- 声で入力（仮・2026-10-07追加。Android・Safariの実機不具合を直した。2026-10-09最新） ----
   let voiceMode='real'; // real/iphone/nospeech/notallowed/noapi（上のトグルで切り替え）
   let recognizing=false;
   let recognitionInstance=null;
   let sessionText=''; // 今の1回（start〜end）で確定した文字をまとめたもの
-  let sessionHadFinal=false; // 今の1回で何か確定したか（②黙っていた、の判定に使う）
-  let userStopped=false; // 「止める」を押した・モーダルを閉じた等で、自動の聞き直しをやめるべきか
+  let sessionInterim=''; // 今の1回の、まだ確定していない最新の文字（Safari対策：これも最後に入れる）
+  let sessionHadFinal=false; // 今の1回で確定した文字が1つでもあったか
+  let sessionHandled=false; // この回の終了処理（文字を足す等）をもう行ったか（end/保険の二重実行防止）
+  let userStopped=false; // 「終わる」を押した・モーダルを閉じた等で、自動の聞き直しをやめるべきか
   let hardErrorStop=false; // not-allowed等のエラーで、自動の聞き直しをやめるべきか
   let voiceRestartCount=0; // 自動で聞き直した回数（④30回で打ち切り）
+  let voiceStopFallbackTimer=null; // ②stop()を呼んでもendが来ないときの保険（1.5秒）
+  let voiceSilenceTimer=null; // ③8秒なにも届かないときの保険
   const VOICE_RESTART_LIMIT=30;
+  const VOICE_STOP_FALLBACK_MS=1500;
+  const VOICE_SILENCE_MS=8000;
   const voiceBtn=document.getElementById('voice-btn');
   const voiceBtnLabel=document.getElementById('voice-btn-label');
   const voiceBtnIconMic=document.getElementById('voice-btn-icon-mic');
@@ -1974,6 +1990,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   const voiceInterimText=document.getElementById('voice-interim-text');
   const voiceErrorEl=document.getElementById('voice-error');
   const voiceIphoneCard=document.getElementById('voice-iphone-card');
+  const voiceLogPre=document.getElementById('voice-log-pre');
   function getSpeechRecognitionCtor(){
     return window.SpeechRecognition||window.webkitSpeechRecognition||null;
   }
@@ -1990,6 +2007,26 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   function stopVoiceRecognition(){
     if(recognitionInstance){try{recognitionInstance.stop();}catch(e){}}
   }
+  // ---- （モックだけ）聞き取りの記録。最新60行・始めからの経過ミリ秒つき ----
+  let voiceLogLines=[];
+  let voiceLogStartTime=0;
+  function voiceLogRender(){voiceLogPre.textContent=voiceLogLines.join('\n');}
+  function voiceLogReset(){voiceLogLines=[];voiceLogStartTime=Date.now();voiceLogRender();}
+  function voiceLogAdd(msg){
+    const t=voiceLogStartTime?(Date.now()-voiceLogStartTime):0;
+    voiceLogLines.push('+'+t+'ms '+msg);
+    if(voiceLogLines.length>60)voiceLogLines=voiceLogLines.slice(-60);
+    voiceLogRender();
+  }
+  function describeVoiceResults(e){
+    const parts=[];
+    for(let i=0;i<e.results.length;i++){
+      const r=e.results[i];
+      parts.push(i+':'+(r.isFinal?'final':'interim')+' "'+r[0].transcript+'"');
+    }
+    return parts.join(' / ');
+  }
+  document.getElementById('voice-log-clear-btn').addEventListener('click',()=>{voiceLogLines=[];voiceLogRender();});
   // 届いた文字を「前の文字で始まっていたら置き換え、そうでなければ足す」でまとめる
   // （Androidの累積した確定結果と、PCの区切られた確定結果の両方に効く）
   function mergeVoiceText(acc,text){
@@ -1999,25 +2036,74 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     if(text.indexOf(acc)===0)return text;
     return acc+text;
   }
-  // 今回確定した文字（sessionText）を入力欄の末尾に足す。末尾が読点・句点でなければ「、」を挟む
+  // 今回確定した文字（sessionText）に、まだ確定していない最新の文字（sessionInterim）もまとめて
+  // 入力欄の末尾に足す（①Safari対策：確定の印が付かない文字も取りこぼさない）
   function appendVoiceSessionText(){
-    if(!sessionText)return;
+    const combined=mergeVoiceText(sessionText,sessionInterim);
+    if(!combined)return;
     const cur=npInput.value;
-    if(cur&&!/[、。]$/.test(cur)){npInput.value=cur+'、'+sessionText;}
-    else{npInput.value=cur+sessionText;}
+    if(cur&&!/[、。]$/.test(cur)){npInput.value=cur+'、'+combined;}
+    else{npInput.value=cur+combined;}
+  }
+  // ③聞いている間、startとonresultのたびに掛け直すタイマー。8秒なにも届かなければ「終わる」と同じ扱いで止める
+  function resetVoiceSilenceTimer(){
+    clearTimeout(voiceSilenceTimer);
+    voiceSilenceTimer=setTimeout(()=>{
+      userStopped=true; // 自動で聞き直さない
+      requestVoiceStop('8秒なにも届かず（無音の保険）');
+    },VOICE_SILENCE_MS);
+  }
+  // stop()を呼び、②1.5秒たってもendが来なければ代わりに終了処理をして打ち切る
+  function requestVoiceStop(reason){
+    clearTimeout(voiceSilenceTimer);
+    voiceLogAdd(reason+' → stop()');
+    stopVoiceRecognition();
+    clearTimeout(voiceStopFallbackTimer);
+    voiceStopFallbackTimer=setTimeout(()=>{
+      if(sessionHandled)return;
+      voiceLogAdd('1.5秒たってもendが来ない → 代わりに終了処理してabort()');
+      finishVoiceSession(true);
+    },VOICE_STOP_FALLBACK_MS);
+  }
+  // end（本物）・②の保険のどちらからも呼ばれる。sessionHandledで二重実行を防ぐ
+  function finishVoiceSession(viaFallback){
+    if(sessionHandled)return;
+    sessionHandled=true;
+    clearTimeout(voiceSilenceTimer);
+    clearTimeout(voiceStopFallbackTimer);
+    voiceInterim.hidden=true;
+    const hadAny=sessionHadFinal||!!sessionInterim;
+    appendVoiceSessionText();
+    if(!viaFallback)voiceLogAdd('end');
+    if(viaFallback){try{recognitionInstance.abort();}catch(e){}}
+    if(userStopped||hardErrorStop){voiceSetListening(false);return;}
+    if(!hadAny){
+      // ②何も確定・途中も届かなかった（黙っていた・no-speech・aborted）。1文字でも入っていれば静かに待機に戻る
+      if(!npInput.value){voiceShowError('声が聞き取れませんでした。もう一度押して話してください（仮）');}
+      voiceSetListening(false);
+      return;
+    }
+    if(voiceRestartCount>=VOICE_RESTART_LIMIT){voiceSetListening(false);return;}
+    voiceRestartCount++;
+    voiceLogAdd('自動で聞き直す #'+voiceRestartCount);
+    startVoiceRecognition(); // ④まだ止めていなければ、自動でもう一度聞き始める（新しいインスタンス）
   }
   function startVoiceRecognition(){
     const Ctor=getSpeechRecognitionCtor();
     if(!Ctor){voiceShowError('このブラウザでは、このボタンでは声を入力できません。キーボードにマイクのマークがあれば、そちらから話せます（仮）');voiceSetListening(false);return;}
     try{
       sessionText='';
+      sessionInterim='';
       sessionHadFinal=false;
+      sessionHandled=false;
       hardErrorStop=false;
       recognitionInstance=new Ctor();
       recognitionInstance.lang='ja-JP';
       recognitionInstance.interimResults=true;
       recognitionInstance.continuous=false;
       recognitionInstance.onresult=(e)=>{
+        resetVoiceSilenceTimer();
+        voiceLogAdd('onresult '+e.results.length+'件: '+describeVoiceResults(e));
         // Androidはonresultのたびにe.resultsへその回の結果が全部（まとめ済みのものも重複して）入って届くことがあるため、
         // 毎回i=0からまっさらに作り直す（sessionTextへの足し込みはしない）
         let fin='',interim='';
@@ -2027,11 +2113,13 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
           else{interim=mergeVoiceText(interim,text);}
         }
         if(fin){sessionText=fin;sessionHadFinal=true;}
+        sessionInterim=interim; // ①Safariは確定しないまま届くことがあるので、毎回その回の最新として持っておく
         if(interim){voiceInterimText.textContent=interim;voiceInterim.hidden=false;}
         else{voiceInterim.hidden=true;}
       };
       recognitionInstance.onerror=(e)=>{
-        // no-speech・abortedは②（黙っていた）と同じ扱いにするので、ここではエラー表示を出さない（onendに任せる）
+        voiceLogAdd('error: '+e.error);
+        // no-speech・abortedは②（黙っていた）と同じ扱いにするので、ここではエラー表示を出さない（終了処理に任せる）
         if(e.error==='no-speech'||e.error==='aborted')return;
         const map={
           'not-allowed':'マイクが使えません。ブラウザの設定でマイクを許可してください（仮）',
@@ -2042,26 +2130,17 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
         hardErrorStop=true;
         voiceShowError(map[e.error]||'声を文字にできませんでした（仮）');
       };
-      recognitionInstance.onend=()=>{
-        voiceInterim.hidden=true;
-        appendVoiceSessionText();
-        if(userStopped||hardErrorStop){voiceSetListening(false);return;}
-        if(!sessionHadFinal){
-          // ②何も確定しなかった（黙っていた・no-speech・aborted）。1文字でも入っていれば静かに待機に戻る
-          if(!npInput.value){voiceShowError('声が聞き取れませんでした。もう一度押して話してください（仮）');}
-          voiceSetListening(false);
-          return;
-        }
-        if(voiceRestartCount>=VOICE_RESTART_LIMIT){voiceSetListening(false);return;}
-        voiceRestartCount++;
-        startVoiceRecognition(); // ④まだ止めていなければ、自動でもう一度聞き始める（新しいインスタンス）
-      };
+      recognitionInstance.onend=()=>{finishVoiceSession(false);};
       recognitionInstance.start();
+      voiceLogAdd('start');
+      resetVoiceSilenceTimer();
       voiceSetListening(true);
     }catch(err){voiceShowError('声を文字にできませんでした（仮）');voiceSetListening(false);}
   }
   function resetVoiceUI(){
     userStopped=true; // 自動の聞き直しを止める（モーダルを閉じる・開き直す・試し方の切り替え時）
+    clearTimeout(voiceSilenceTimer);
+    clearTimeout(voiceStopFallbackTimer);
     if(recognizing)stopVoiceRecognition();
     voiceSetListening(false);
     voiceInterim.hidden=true;
@@ -2084,7 +2163,11 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     if(voiceMode==='notallowed'){voiceShowError('マイクが使えません。ブラウザの設定でマイクを許可してください（仮）');return;}
     if(voiceMode==='noapi'){voiceShowError('このブラウザでは、このボタンでは声を入力できません。キーボードにマイクのマークがあれば、そちらから話せます（仮）');return;}
     if(voiceMode==='real'&&location.protocol==='file:'){voiceShowError('ファイルを直接開いた形では、声を試せません（Chromeの決まりです）。https://chiby1221smile.github.io/nekonote-preview/task-map/ をChromeで開くと試せます（この表示はモックだけのものです）');return;}
-    if(recognizing){userStopped=true;stopVoiceRecognition();return;}
+    if(recognizing){
+      userStopped=true;
+      requestVoiceStop('「声の入力を終わる」を押した');
+      return;
+    }
     userStopped=false;voiceRestartCount=0;
     startVoiceRecognition();
   });
@@ -2289,6 +2372,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     npCards=[];lastSplitCards=null;showCardErrors=false;
     npIncompleteErr.hidden=true;npNoneErr.hidden=true;
     resetVoiceUI();
+    voiceLogReset(); // モーダルを開き直したら聞き取りの記録も空にする
     newprojModal.hidden=false;
   }
   document.getElementById('mobile-newproj-btn').addEventListener('click',openNewproj);
