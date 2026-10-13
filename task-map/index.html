@@ -475,15 +475,37 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   }
 
   // ======== 完成した建物の7種類（仮：プロジェクトの中身とタスク数をもとに決める。プロジェクトごとに固定） ========
-  const BT_TYPES=['house','shop','office','tower','public','skyscraper','factory'];
-  // ③の「残り」で使うハッシュ振り分けの候補。shop・skyscraper・factoryは①②専用なので外す
+  // （2026-10-14：製作寄りを中身で分ける3種類＝アトリエ・書斎・研究所を追加。絵は done_atelier／done_study／done_lab）
+  const BT_TYPES=['house','shop','office','tower','public','skyscraper','factory','atelier','study','lab'];
+  // ③の「残り」で使うハッシュ振り分けの候補。shop・skyscraper・factory・atelier・study・labは①②専用なので外す
   const BT_HASH_TYPES=['house','office','tower','public'];
-  const BT_COLORS={house:'#c97b5f',shop:'#5b89b5',office:'#6b7280',tower:'#454f63',public:'#3f7d58',skyscraper:'#2f3a4f',factory:'#8a6d3b'};
-  const BT_ICONS={house:'🏠',shop:'🏪',office:'🏢',tower:'🗼',public:'🏛',skyscraper:'🏙',factory:'🏭'};
+  const BT_COLORS={house:'#c97b5f',shop:'#5b89b5',office:'#6b7280',tower:'#454f63',public:'#3f7d58',skyscraper:'#2f3a4f',factory:'#8a6d3b',atelier:'#b85c8a',study:'#7a5a3a',lab:'#3f7f8f'};
+  // 絵が読めないときの代わりの文字。新しい3種類は絵文字を使わず空にする（空なら地面の色の菱形だけ出す）
+  const BT_ICONS={house:'🏠',shop:'🏪',office:'🏢',tower:'🗼',public:'🏛',skyscraper:'🏙',factory:'🏭',atelier:'',study:'',lab:''};
   const MANY_TASKS_THRESHOLD=6; // （仮）このタスク数（孫があれば孫の数）以上なら高層ビルにする基準
+  // 製作寄りの中身の判定に使う言葉（仮：本番はAIが判断する）。プロジェクト名→子タスク名の順に、上から先に当たった種類にする
+  const MAKE_KEYWORDS=[
+    {type:'atelier',words:['デザイン','絵','イラスト','写真','動画','撮影','チラシ','ロゴ','画像','サムネ']},
+    // 「本」だけは「デモ12本」「本番」「日本」などにも入っているので、数字・「日」のあと／「番」「当」「日」「人」の前は除く
+    {type:'study',words:['文章','記事','原稿','資料',/(?<![0-9０-９日])本(?![番当日人])/,'ブログ','note','執筆','説明文','台本']},
+    // 2026-10-14：ダッシュボード・予約・フォーム・管理・診断・LINE・Webアプリ・LPを追加（LPはホームページ扱い）。
+    // 「lp」は英単語（helpなど）の中に入るので、前後が英字のときは除く
+    {type:'lab',words:['アプリ','システム','ホームページ','サイト','gas','プログラム','ツール','開発','自動化','ダッシュボード','予約','フォーム','管理','診断','line','webアプリ',/(?<![a-z])lp(?![a-z])/]}
+  ];
+  function makeTypeOf(block){
+    const matchIn=text=>{
+      const t=String(text||'').toLowerCase();
+      for(const g of MAKE_KEYWORDS){if(g.words.some(w=>(w instanceof RegExp)?w.test(t):t.includes(w)))return g.type;}
+      return null;
+    };
+    const byName=matchIn(block.name);
+    if(byName)return byName;
+    const taskText=leafTasksOf(block).map(p=>p.label).concat(block.plots.map(p=>p.label)).join(' ');
+    return matchIn(taskText)||'factory'; // どれでもない製作（ものづくり・印刷・発送・梱包・商品など）は工場
+  }
   function assignBuildingType(block){
-    // ①プロジェクトの中身（kind）で決める：製作寄りは工場、物販寄りはお店
-    if(block.kind==='make')return 'factory';
+    // ①プロジェクトの中身（kind）で決める：製作寄りは中身で アトリエ・書斎・研究所・工場に分ける、物販寄りはお店
+    if(block.kind==='make')return makeTypeOf(block);
     if(block.kind==='sell')return 'shop';
     // ②どちらでもなく、タスク数（孫がある子は孫の数で数える＝leafTasksOfと同じ）が多めなら高層ビル
     const count=leafTasksOf(block).length;
@@ -561,7 +583,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     ]},
     {id:'sanzen',name:'産前産後つなぐ大阪 予約管理',kind:'make',completedNote:'実装・テスト・資料送付まで完了',plots:[
       {id:'sz1',label:'予約システムを実装した',state:'built',imp:'high',urg:'high'},
-      {id:'sz2',label:'資料を送付した',state:'built',imp:'low',urg:'low'}
+      {id:'sz2',label:'ご案内を送付した',state:'built',imp:'low',urg:'low'}
     ]},
     {id:'cflp',name:'クラウドファンディング協業LP',kind:'make',completedNote:'GitHub Pagesに公開済み',plots:[
       {id:'cl1',label:'LPを作った',state:'built',imp:'high',urg:'low'},
@@ -569,7 +591,10 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     ]}
   );
   // （仮）サンプル案件のうち2件は物販寄りの名前に変えてkind:'sell'にする（本番はAIがプロジェクト名とタスクから判断する）
-  const DUMMY_KIND_OVERRIDES={1:{name:'（仮）手づくり雑貨のネット販売',kind:'sell'},2:{name:'（仮）リユース品の店頭販売会',kind:'sell'}};
+  // 4〜6は製作寄りの見本（2026-10-14：アトリエ・書斎・工場が街に出るように。名前のキーワードで種類が決まる）
+  const DUMMY_KIND_OVERRIDES={1:{name:'（仮）手づくり雑貨のネット販売',kind:'sell'},2:{name:'（仮）リユース品の店頭販売会',kind:'sell'},
+    4:{name:'（仮）チラシとロゴのデザイン',kind:'make'},5:{name:'（仮）note記事の執筆',kind:'make'},6:{name:'（仮）手づくり雑貨の梱包と発送',kind:'make'},
+    7:{name:'（仮）オリジナルグッズの製作',kind:'make'}};
   // 完成済みの高層ビルの見本が地図で見えるよう、サンプル案件3だけタスクを6個（すべてstate:'built'）に増やす
   const DUMMY_PLOT_OVERRIDES={3:[
     {id:'dm3a',label:'作業を終えた（仮）',state:'built',imp:'low',urg:'high'},
@@ -650,6 +675,10 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     'done_tower.png':     {widthFrac:0.688, centerYFrac:0.706, topFrac:0.112, bodyLeft:0.370, bodyRight:0.630},
     'done_public.png':    {widthFrac:0.938, centerYFrac:0.585, topFrac:0.206, bodyLeft:0.247, bodyRight:0.672},
     'done_factory.png':   {widthFrac:0.742, centerYFrac:0.600, topFrac:0.180, bodyLeft:0.284, bodyRight:0.729},
+    // 2026-10-14：アトリエ・書斎・研究所。3枚ともdone_officeと同じ形で測れたので、done_officeの値を元にtopFracだけ0.104にした
+    'done_atelier.png':   {widthFrac:0.857, centerYFrac:0.672, topFrac:0.104, bodyLeft:0.273, bodyRight:0.755},
+    'done_study.png':     {widthFrac:0.857, centerYFrac:0.672, topFrac:0.104, bodyLeft:0.273, bodyRight:0.755},
+    'done_lab.png':       {widthFrac:0.857, centerYFrac:0.672, topFrac:0.104, bodyLeft:0.273, bodyRight:0.755},
     'done_skyscraper.png':{widthFrac:0.625, centerYFrac:0.771, topFrac:0.049, bodyLeft:0.380, bodyRight:0.617},
     'lot_empty.png':      {widthFrac:0.867, centerYFrac:0.507, topFrac:0.214, bodyLeft:0.422, bodyRight:0.578},
     'lot_build.png':      {widthFrac:0.857, centerYFrac:0.544, topFrac:0.156, bodyLeft:0.422, bodyRight:0.641},
@@ -657,8 +686,9 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   };
   // 建物の種類ごとの区画の広さ（仮・1か所にまとめる）。foot＝絵の表示に使うマス数（1か2）で、区画の当たり判定の大きさにも使う
   // skyscraper・public＝たて2×よこ2の4マス（絵は2マス分）／house・shop・tower＝1マス／office・factory＝建物1マス＋庭1マスの2マス（絵は1マス分）
-  const BT_FOOT={house:1,shop:1,office:1,tower:1,public:2,factory:1,skyscraper:2};
-  const BT_HAS_GARDEN={office:true,factory:true};
+  // 2026-10-14：アトリエ・書斎＝1マス／研究所＝建物1マス＋庭1マス（オフィスと同じ）
+  const BT_FOOT={house:1,shop:1,office:1,tower:1,public:2,factory:1,skyscraper:2,atelier:1,study:1,lab:1};
+  const BT_HAS_GARDEN={office:true,factory:true,lab:true};
   const TAG_ZOOM_THRESHOLD=1.3;
   let panX=0,panY=0,isoScale=0.9,mapNeedsRefit=true,showAllNames=false,meetianOn=false,meetianConnFail=false;
   // 建物の名前の札（2026-10-05・仮）：押して選んだときだけ2.5秒出て、そのあと薄くなって消える（選んだ状態・光り方・吹き出しは変えない）
@@ -1059,7 +1089,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   function iconOf(state,btype){
     if(state==='building')return '🚧';
     if(state==='built')return '🧱';
-    if(state==='complete')return BT_ICONS[btype]||'🏠';
+    if(state==='complete')return (btype in BT_ICONS)?BT_ICONS[btype]:'🏠'; // 新しい3種類は空文字が正しい値なので、||ではなくinで判定する
     return '';
   }
   function imgOf(state,btype){
