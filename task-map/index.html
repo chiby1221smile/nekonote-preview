@@ -72,8 +72,9 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
 .iso-neglect-fallback{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:11px;line-height:1;text-align:center;white-space:nowrap}
 /* 放置の建物の地面のひし形（2026-10-13：どの区画か分かるように。火事＝薄いオレンジ、雑草・カラス＝薄い茶色。縁取りは拡大しても細くならない） */
 .iso-neglect-ground{position:absolute;pointer-events:none;overflow:visible}
-.iso-neglect-ground polygon{fill:rgba(140,110,60,.16);stroke:rgba(120,95,50,.7);stroke-width:2;vector-effect:non-scaling-stroke}
-.iso-neglect-ground.is-fire polygon{fill:rgba(255,150,50,.38);stroke:rgba(230,110,20,.95);stroke-width:2.5}
+/* 輪郭の太さは、地図の拡大率の逆数（--inv。applyIsoTransformが設定）を掛けて、画面上でほぼ同じ太さに保つ（太くなりすぎないよう上限あり） */
+.iso-neglect-ground polygon{fill:rgba(140,110,60,.16);stroke:rgba(120,95,50,.7);stroke-width:min(calc(2px * var(--inv,1)),10px)}
+.iso-neglect-ground.is-fire polygon{fill:rgba(255,150,50,.38);stroke:rgba(230,110,20,.95);stroke-width:min(calc(2.5px * var(--inv,1)),12px)}
 .iso-smoke{position:absolute;pointer-events:none}
 .iso-smoke-puff{position:absolute;left:50%;bottom:0;width:var(--smoke-size,16px);height:var(--smoke-size,16px);margin-left:calc(var(--smoke-size,16px)/-2);border-radius:50%;background:var(--map-smoke-dark);opacity:0;transform:translate(0,0) scale(.6);animation:iso-smoke-rise 2.6s ease-out infinite}
 .iso-smoke-puff:nth-child(1){animation-delay:0s;left:50%;--drift:5px}
@@ -274,7 +275,9 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
 .npcard-due-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .npcard-date{box-sizing:border-box;border:1px solid var(--line);border-radius:3px;background:var(--paper);padding:9px 10px;font:inherit;font-size:16px;color:var(--ink);flex:1;min-width:140px}
 .npcard-choice{font-size:13px;padding:7px 11px}
-.npcard-choice.is-off{background:var(--card);border-color:var(--line);color:var(--sub)}
+.npcard-choice.is-off{background:var(--card);border-color:var(--line);color:var(--sub);font-weight:400}
+/* 選んでいる方がひと目で分かるように、太い枠と太字にする（2026-10-13）。選んでいない方を押すと、そちらに切り替わる */
+.npcard-choice[aria-pressed="true"]{box-shadow:inset 0 0 0 2px #3a2d00;font-weight:800}
 .npcard-really-row{display:flex;gap:6px;flex-wrap:wrap}
 .npcard-note{margin:6px 0 0;font-size:11px;color:var(--sub)}
 .npcard-remove-btn{background:var(--card);border-color:var(--line);color:var(--sub);font-size:12px;padding:6px 10px}
@@ -294,8 +297,12 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
 .npcard.npcard-flash{animation:npcard-flash .6s ease-in-out 3}
 @keyframes npcard-flash{0%,100%{background:var(--card)}50%{background:rgba(255,150,180,.5)}}
 /* ---- 建てたあとの予定地（2026-10-13追加：できた区画に薄いピンクをゆっくり点滅。地図の座標の中に置くので拡大・ドラッグに付いてくる。次の操作で消す） ---- */
-.iso-newplot-hint{position:absolute;left:8px;top:128px;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);background:rgba(255,150,180,.5);pointer-events:none;animation:iso-newplot-pulse 2.6s ease-in-out infinite}
-@keyframes iso-newplot-pulse{0%,100%{opacity:.55}50%{opacity:1}}
+/* 塗り（薄いピンク）＋太めのピンクの輪郭。輪郭の太さは拡大率の逆数（--inv）で補正する */
+.iso-newplot-hint{position:absolute;left:8px;top:128px;overflow:visible;pointer-events:none;animation:iso-newplot-pulse 2.6s ease-in-out infinite}
+.iso-newplot-hint polygon{fill:rgba(255,150,180,.5);stroke:rgba(240,90,140,.95);stroke-width:min(calc(3.5px * var(--inv,1)),14px);stroke-linejoin:round}
+@keyframes iso-newplot-pulse{0%,100%{opacity:.6}50%{opacity:1}}
+/* 区画の上の小さな札「NEW」。名前の札と同じくステージ直下に置く（他の建物に隠れない）。拡大縮小しても読める大きさに--invで補正 */
+.iso-newplot-label{position:absolute;transform:translate(-50%,-50%) scale(clamp(1,var(--inv,1),3.5));transform-origin:center;font-size:11px;font-weight:800;line-height:1;color:#3a2d00;background:rgba(255,170,195,.97);border:2px solid rgba(240,90,140,.95);border-radius:9px;padding:2px 7px;white-space:nowrap;pointer-events:none;z-index:100001}
 @media (prefers-reduced-motion:reduce){.npcard.npcard-flash{animation:none}.iso-newplot-hint{animation:none}}
 </style>
 </head>
@@ -583,6 +590,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   let lastBuiltKey=null,currentTask=null;
   // 「この内容で建てる」で新しくできた区画のid。入っている間、その区画に薄いピンクの点滅を重ねる（次の操作で空にする）
   const newPlotHintIds=new Set();
+  let newPlotHintArmedAt=0; // 点滅を始めた時刻（ミリ秒）。閉じた直後の少しの間は「次の操作」に数えない
   // ======== 選択状態（1か所にまとめる。2026-10-04：3つの見方の連動を直すため） ========
   // null | {kind:'task',bId,pId} | {kind:'building',blockId} | {kind:'resident',residentId}
   let selection=null;
@@ -818,34 +826,52 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     }
     return strips;
   }
+  // ======== 街を広げる（2026-10-13：「土地が足りない」を出さない） ========
+  // 街区の列数は固定（仮4列）。置く場所が足りなくなったら、行（街区）を下に足して広げる。
+  // 一度置いた区画の場所は block._slot に覚えて、あとから動かさない（行を足しても、既にある建物の位置は変わらない）
+  // 道路は区画に使われなかったマスがすべて道路になるので、行を足しても1本の網のままつながる
+  const CITY_COLS=4;
+  let cityParkRow=null; // 公園の街区の行。最初に街を作ったときの最後の行に固定する（行を足しても動かさない）
+  let cityRowsMin=2; // これより少ない行数では試さない（広がった街を毎回2行から試し直さないため）
   function computeLayout(){
+    let R=Math.max(2,cityRowsMin,cityParkRow===null?2:cityParkRow+1);
+    let layout=null,guard=0;
+    while(!layout&&guard<200){
+      layout=computeLayoutWithRows(R,cityParkRow===null?R-1:cityParkRow);
+      if(!layout)R++;
+      guard++;
+    }
+    if(!layout)throw new Error('街を広げられませんでした（想定外）'); // 行を足せば必ず置けるので、ここには来ない
+    if(cityParkRow===null)cityParkRow=R-1;
+    cityRowsMin=R;
+    layout.pending.forEach(p=>{p.block._slot=p.slot;}); // 新しく置いた区画の場所を覚える
+    return layout;
+  }
+  // R行の街に全部の区画を置いてみる。置ききれなければnull（呼び出し元が行を足して試し直す）
+  function computeLayoutWithRows(R,parkR){
     // 街区を縦横の格子に並べる（全体が四角になるので、道路だけの広い空き地ができない）
-    // 区画は建物の種類によって1・2・4マスとバラバラなので、街区の数・広さは必要なマス数の合計で足りるかを見る
-    const plotSpecs=blocks.map(block=>{
+    // 区画は建物の種類によって1・2・4マスとバラバラ
+    const specs=blocks.map(block=>{
       const btype=block._btype||(block._btype=assignBuildingType(block));
       const foot=BT_FOOT[btype]||1;
       const hasGarden=!!BT_HAS_GARDEN[btype];
       const masu=foot===2?4:(hasGarden?2:1);
       return {block,btype,foot,hasGarden,masu};
     });
-    const masuNeeded=plotSpecs.reduce((s,p)=>s+p.masu,0);
-    const blockCount=Math.ceil(masuNeeded/5)+1;
-    const C=Math.max(2,Math.ceil(Math.sqrt(blockCount)));
-    const R=Math.max(2,Math.ceil(blockCount/C));
+    const C=CITY_COLS;
     const colW=[],rowH=[];
     for(let c=0;c<C;c++)colW.push(hash01('colw'+c)<0.5?2:3);
     for(let r=0;r<R;r++)rowH.push(hash01('rowh'+r)<0.5?2:3);
-    const cap=()=>{let s=0;for(let r=0;r<R;r++)for(let c=0;c<C;c++)s+=rowH[r]*colW[c];return s-rowH[R-1]*colW[Math.floor(C/2)];};
-    let g2=0;while(cap()<masuNeeded&&g2<40){const i=g2%(C+R);if(i<C)colW[i]=3;else rowH[i-C]=3;g2++;}
     const colStart=[],rowStart=[];
     {let x=1;for(let c=0;c<C;c++){colStart.push(x);x+=colW[c]+1;}}
     {let y=1;for(let r=0;r<R;r++){rowStart.push(y);y+=rowH[r]+1;}}
     const totalCols=colStart[C-1]+colW[C-1]+1;
     const totalRows=rowStart[R-1]+rowH[R-1]+1;
-    // 公園は最後の行のまん中の街区。それ以外は建物の街区（2次元の格子のまま持ち、2×2・2連のマスを探せるようにする）
-    const parkR=R-1,parkC=Math.floor(C/2);
+    // 公園は決まった行（最初に街を作ったときの最後の行）のまん中の街区。それ以外は建物の街区（2次元の格子のまま持ち、2×2・2連のマスを探せるようにする）
+    const parkC=Math.floor(C/2);
     const buildingBlocks=[];
     const parkCells=[];
+    const cellAt=new Map(); // 'row_col' → 街区の格子のマス（置き済みの区画のマスを探すため）
     for(let r=0;r<R;r++)for(let c=0;c<C;c++){
       const w=colW[c],h=rowH[r];
       if(r===parkR&&c===parkC){
@@ -855,7 +881,10 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       const grid=[];
       for(let ly=0;ly<h;ly++){
         const rowArr=[];
-        for(let lx=0;lx<w;lx++)rowArr.push({row:rowStart[r]+ly,col:colStart[c]+lx,used:false});
+        for(let lx=0;lx<w;lx++){
+          const g={row:rowStart[r]+ly,col:colStart[c]+lx,used:false};
+          rowArr.push(g);cellAt.set(g.row+'_'+g.col,g);
+        }
         grid.push(rowArr);
       }
       buildingBlocks.push({grid,width:w,height:h});
@@ -863,6 +892,28 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     const cellsLogical=[];
     const interiorSet=new Set();
     const markUsed=cell=>interiorSet.add(cell.row+'_'+cell.col);
+    // 区画（slot）が使うマスの一覧：4マス区画＝2×2／庭つき＝建物＋庭／ほか＝1マス
+    const slotCells=slot=>{
+      if(slot.foot===2)return [{row:slot.row,col:slot.col},{row:slot.row,col:slot.col+1},{row:slot.row+1,col:slot.col},{row:slot.row+1,col:slot.col+1}];
+      const list=[{row:slot.row,col:slot.col}];
+      if(slot.garden)list.push({row:slot.garden.row,col:slot.garden.col});
+      return list;
+    };
+    const pushSlotCells=(blockId,slot)=>{
+      cellsLogical.push({row:slot.row,col:slot.col,type:'plot',blockId:blockId,foot:slot.foot});
+      if(slot.garden)cellsLogical.push({row:slot.garden.row,col:slot.garden.col,type:'plotgarden',deco:slot.garden.deco});
+    };
+    // すでに置いた区画は、同じ場所にそのまま置く（動かさない）。街の外に出てしまう（行が足りない）ときはnull
+    for(const s of specs){
+      const slot=s.block._slot;
+      if(!slot)continue;
+      for(const cell of slotCells(slot)){
+        const g=cellAt.get(cell.row+'_'+cell.col);
+        if(!g)return null;
+        g.used=true;markUsed(g);
+      }
+      pushSlotCells(s.block.id,slot);
+    }
     // 街区の中でその区画が入る最初の空き位置を探す
     function findSlot2x2(bb){
       for(let ly=0;ly+1<bb.height;ly++)for(let lx=0;lx+1<bb.width;lx++){
@@ -892,51 +943,35 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       }
       return null;
     }
-    // 街区を順に回りながら、今置きたい区画が入る最初の空き位置に置く（入る街区が見つかるまで次の街区を試す）
-    function placeRoundRobin(queue,placeFn){
-      let idx=0,guard=0;
-      while(idx<queue.length&&guard<10000){
-        let placedAny=false;
-        for(const bb of buildingBlocks){
-          if(idx>=queue.length)break;
-          if(placeFn(bb,queue[idx])){idx++;placedAny=true;}
+    // まだ場所が決まっていない区画を、①4マス（skyscraper・public）→②2マス（office・factory、庭つき）→③1マスの順に置く。
+    // 街区を順に回りながら（置いた数ずつ開始位置をずらして散らす）、入る最初の空き位置に置く。
+    // どの街区にも入らなければnullを返し、呼び出し元が行を足して試し直す（今までのように1マスへ縮めたり、置かずに諦めたりしない）
+    const pending=[];
+    const unplaced=specs.filter(s=>!s.block._slot);
+    const order=unplaced.filter(s=>s.masu===4).concat(unplaced.filter(s=>s.masu===2),unplaced.filter(s=>s.masu===1));
+    let placedCount=specs.length-unplaced.length;
+    for(const spec of order){
+      let slot=null;
+      for(let k=0;k<buildingBlocks.length&&!slot;k++){
+        const bb=buildingBlocks[(placedCount+k)%buildingBlocks.length];
+        if(spec.masu===4){
+          const pos=findSlot2x2(bb);
+          if(pos)slot={row:pos.row,col:pos.col,foot:2,garden:null};
+        }else if(spec.masu===2){
+          const vertical=hash01('gardenorient_'+spec.block.id)<0.5;
+          const pos=findSlotPair(bb,vertical)||findSlotPair(bb,!vertical);
+          if(pos)slot={row:pos.building.row,col:pos.building.col,foot:1,garden:{row:pos.garden.row,col:pos.garden.col,deco:hash01('gardendeco_'+spec.block.id)<0.5?'trees':'park'}};
+        }else{
+          const pos=findSlot1x1(bb);
+          if(pos)slot={row:pos.row,col:pos.col,foot:1,garden:null};
         }
-        guard++;
-        if(!placedAny)break;
       }
-      return queue.slice(idx);
+      if(!slot)return null;
+      slotCells(slot).forEach(markUsed);
+      pushSlotCells(spec.block.id,slot);
+      pending.push({block:spec.block,slot});
+      placedCount++;
     }
-    // ①4マス（skyscraper・public）→②2マス（office・factory、庭つき）→③1マスの順に先へ置く
-    const singles=plotSpecs.filter(p=>p.masu===1);
-    const bigs=plotSpecs.filter(p=>p.masu===4);
-    const gardens=plotSpecs.filter(p=>p.masu===2);
-    const leftoverBigs=placeRoundRobin(bigs,(bb,spec)=>{
-      const pos=findSlot2x2(bb);
-      if(!pos)return false;
-      markUsed({row:pos.row,col:pos.col});markUsed({row:pos.row,col:pos.col+1});
-      markUsed({row:pos.row+1,col:pos.col});markUsed({row:pos.row+1,col:pos.col+1});
-      cellsLogical.push({row:pos.row,col:pos.col,type:'plot',blockId:spec.block.id,foot:2});
-      return true;
-    });
-    const leftoverGardens=placeRoundRobin(gardens,(bb,spec)=>{
-      const vertical=hash01('gardenorient_'+spec.block.id)<0.5;
-      const pos=findSlotPair(bb,vertical);
-      if(!pos)return false;
-      markUsed(pos.building);markUsed(pos.garden);
-      cellsLogical.push({row:pos.building.row,col:pos.building.col,type:'plot',blockId:spec.block.id,foot:1});
-      const deco=hash01('gardendeco_'+spec.block.id)<0.5?'trees':'park';
-      cellsLogical.push({row:pos.garden.row,col:pos.garden.col,type:'plotgarden',deco});
-      return true;
-    });
-    // どの街区にも入らなかった大きい区画・庭つき区画は、1マスに縮めて③に回す（建物が置かれないことは起こさない）
-    const allSingles=singles.concat(leftoverBigs,leftoverGardens);
-    placeRoundRobin(allSingles,(bb,spec)=>{
-      const pos=findSlot1x1(bb);
-      if(!pos)return false;
-      markUsed(pos);
-      cellsLogical.push({row:pos.row,col:pos.col,type:'plot',blockId:spec.block.id,foot:1});
-      return true;
-    });
     // 街区に残ったマス：街区の端に1つだけ公園か木立を置くことがあり、残りは何も置かない（芝の空き地のまま）
     buildingBlocks.forEach((bb,bi)=>{
       const leftovers=[];
@@ -952,7 +987,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     cellsLogical.push({row:rowStart[parkR]+(rowH[parkR]-1)/2,col:colStart[parkC]+(colW[parkC]-1)/2,type:'bigpark',size:Math.min(rowH[parkR],colW[parkC])});
     // 残りは全部つながった道路（街区を四角く囲む網）になる
     for(let r=0;r<totalRows;r++)for(let c=0;c<totalCols;c++)if(!interiorSet.has(r+'_'+c))cellsLogical.push({row:r,col:c,type:'road'});
-    return {cellsLogical,totalCols,totalRows};
+    return {cellsLogical,totalCols,totalRows,pending};
   }
   function toPixel(row,col,totalRows){
     const offsetX=(totalRows-1)*HALF_W;
@@ -1111,10 +1146,8 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
         // 建てたあとの予定地（2026-10-13）：地面のひし形（.iso-tile-hit）と同じ位置・大きさに、薄いピンクをゆっくり点滅させて重ねる
         // pointer-events:noneなので建物を押す動きは変わらない。タイルの中に置くので拡大・ドラッグに付いてくる
         if(newPlotHintIds.has(block.id)){
-          const nh=document.createElement('span');
-          nh.className='iso-newplot-hint';
-          nh.style.width=tileW+'px';nh.style.height=tileH+'px';
-          tile.appendChild(nh);
+          // 塗り＋ピンクの太めの輪郭（SVG。座標は区画の実寸。輪郭の太さは地図の拡大縮小に合わせて--invで補正し、画面上でほぼ同じ太さに保つ）
+          tile.insertAdjacentHTML('beforeend',`<svg class="iso-newplot-hint" style="width:${tileW}px;height:${tileH}px" viewBox="0 0 ${tileW} ${tileH}" aria-hidden="true"><polygon points="${tileW/2},2 ${tileW-2},${tileH/2} ${tileW/2},${tileH-2} 2,${tileH/2}"/></svg>`);
         }
         // 放置（2026-10-05・仮）：押しても何も起きない飾り（当たり判定の上に重ねるがpointer-events:noneなので建物を押す動きは変わらない）
         const neglectLv=neglectStageOf(block);
@@ -1124,7 +1157,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
           // どの区画の建物か分かるように、放置の建物の地面のひし形を色で敷いて縁取る（2026-10-13：炎・煙・雑草・カラスがかかっていても区画が分かるように）
           // 火事（消火前）＝薄いオレンジ／雑草・カラス（と消火後）＝薄い茶色。炎・煙・雑草より下に描く（後ろのneglectHtmlが上に重なる）
           const groundIsFire=neglectLv>=3&&!block._fireQuenched;
-          neglectHtml+=`<svg class="iso-neglect-ground${groundIsFire?' is-fire':''}" style="left:8px;top:128px;width:${tileW}px;height:${tileH}px" viewBox="0 0 100 50" preserveAspectRatio="none" aria-hidden="true"><polygon points="50,1 99,25 50,49 1,25"/></svg>`;
+          neglectHtml+=`<svg class="iso-neglect-ground${groundIsFire?' is-fire':''}" style="left:8px;top:128px;width:${tileW}px;height:${tileH}px" viewBox="0 0 ${tileW} ${tileH}" aria-hidden="true"><polygon points="${tileW/2},1 ${tileW-1},${tileH/2} ${tileW/2},${tileH-1} 1,${tileH/2}"/></svg>`;
           const wSize=tileW*0.46,wLeft=boxW/2-wSize/2,wTop=boxH-tileH*0.82;
           neglectHtml+=`<div class="iso-neglect-weeds-wrap" style="left:${wLeft}px;top:${wTop}px;width:${wSize}px;height:${(wSize*0.7).toFixed(1)}px"><img class="iso-neglect-weeds-img" src="モック素材_20261004/overlay_weeds.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="iso-neglect-fallback">🌿🌿🌿</span></div>`;
           if(neglectLv>=2){
@@ -1170,6 +1203,12 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
         const tag=document.createElement('div');tag.className='iso-block-tag';tag.dataset.block=block.id;
         tag.style.left=(x+tileW/2)+'px';tag.style.top=(y-4)+'px';tag.textContent=block.name;
         stage.appendChild(tag);
+        // 建てたばかりの区画の上に小さな札「NEW」を出す（名前の札と同じくステージの直下＝他の建物に隠れない。拡大縮小しても読める大きさ）
+        if(newPlotHintIds.has(block.id)){
+          const nw=document.createElement('div');nw.className='iso-newplot-label';nw.textContent='NEW';
+          nw.style.left=(x+tileW/2)+'px';nw.style.top=(y+tileH*0.4)+'px';
+          stage.appendChild(nw);
+        }
         return;
       }
       const {x,y}=toPixel(cell.row,cell.col,layout.totalRows);
@@ -2391,19 +2430,26 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       const dateInput=document.createElement('input');
       dateInput.type='date';dateInput.className='npcard-date';
       dateInput.value=card.dueNone?'':card.dueValue;
-      dateInput.disabled=card.dueNone;
+      // 2026-10-13：日付の欄は「なし」を選んでいても入力できる（日付を入れると「なし」が外れる）。「なし」はもう一度押すと外れる
       const noneBtn=document.createElement('button');
-      noneBtn.type='button';noneBtn.className='btn npcard-choice'+(card.dueNone?'':' is-off');noneBtn.textContent='なし';
-      dateInput.addEventListener('input',()=>{
-        card.dueValue=dateInput.value;card.dueNone=false;
-        noneBtn.classList.add('is-off');dateInput.disabled=false;
+      noneBtn.type='button';noneBtn.className='btn npcard-choice';noneBtn.textContent='なし';
+      const showDueChoice=()=>{
+        noneBtn.classList.toggle('is-off',!card.dueNone);
+        noneBtn.setAttribute('aria-pressed',card.dueNone?'true':'false');
+      };
+      showDueChoice();
+      const onDateChange=()=>{
+        card.dueValue=dateInput.value;
+        if(dateInput.value)card.dueNone=false; // 日付を入れたら「なし」は外れる（日付を消しただけのときは「なし」の状態を変えない）
+        showDueChoice();
         syncMarks();
-      });
+      };
+      dateInput.addEventListener('input',onDateChange);
+      dateInput.addEventListener('change',onDateChange);
       noneBtn.addEventListener('click',()=>{
         card.dueNone=!card.dueNone;
-        if(card.dueNone){card.dueValue='';dateInput.value='';}
-        dateInput.disabled=card.dueNone;
-        noneBtn.classList.toggle('is-off',!card.dueNone);
+        if(card.dueNone){card.dueValue='';dateInput.value='';} // 「なし」にしたら日付は空にする
+        showDueChoice();
         syncMarks();
       });
       dueRow.appendChild(dateInput);dueRow.appendChild(noneBtn);
@@ -2420,10 +2466,14 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       REALLY_DOING_OPTIONS_DEMO.forEach(opt=>{
         const b=document.createElement('button');
         b.type='button';b.className='btn npcard-choice'+(card.reallyAnswer===opt?'':' is-off');b.textContent=opt;
-        // 押したあとは作り直さず、その場で色と注記と「未回答」の印だけ更新する（点滅やスクロール位置を壊さないため）
+        b.setAttribute('aria-pressed',card.reallyAnswer===opt?'true':'false');
+        // 3つの答えはいつでも押し直せて、押した方に切り替わる。作り直さず、その場で色と注記と「未回答」の印だけ更新する（点滅やスクロール位置を壊さないため）
         b.addEventListener('click',()=>{
           card.reallyAnswer=opt;
-          reallyBtns.forEach(x=>x.btn.classList.toggle('is-off',card.reallyAnswer!==x.opt));
+          reallyBtns.forEach(x=>{
+            x.btn.classList.toggle('is-off',card.reallyAnswer!==x.opt);
+            x.btn.setAttribute('aria-pressed',card.reallyAnswer===x.opt?'true':'false');
+          });
           syncMarks();
         });
         reallyBtns.push({btn:b,opt:opt});
@@ -2572,7 +2622,10 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       mountPanels();
     }
     renderAll();
-    ensureNewPlotVisible(createdBlocks[0].id);
+    newPlotHintArmedAt=Date.now();
+    ensureNewPlotsVisible(createdBlocks.map(b=>b.id)); // 1件なら画面の外のときだけ中央に／複数なら全部が入る位置・倍率に
+    // ページ自体が下や上にスクロールされていて地図が画面の外にあるときは、地図が見える位置まで動かす（PCの3つ並べで見えない対策）
+    panelMap.querySelector('.iso-viewport').scrollIntoView({block:'nearest',behavior:'smooth'});
   });
 
   // ---- 建てたあとの予定地の点滅（2026-10-13追加） ----
@@ -2592,7 +2645,36 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   // 点滅を止めて消す（描き直しはしない。今ある印を外すだけ）
   function clearNewPlotHint(){
     newPlotHintIds.clear();
-    panelMap.querySelectorAll('.iso-newplot-hint').forEach(el=>el.remove());
+    panelMap.querySelectorAll('.iso-newplot-hint,.iso-newplot-label').forEach(el=>el.remove());
+  }
+  // 建てた区画が複数のときは、全部が画面に入る位置・倍率まで地図を寄せる（1件のときは上のensureNewPlotVisible＝画面の外なら中央に）
+  // すでに全部が見えているときは動かさない。拡大の上限は街を最初に開くときと同じ1.2、縮小の下限は拡大縮小ボタンと同じ0.2
+  function ensureNewPlotsVisible(ids){
+    if(ids.length<=1){if(ids.length)ensureNewPlotVisible(ids[0]);return;}
+    if(!mapIsVisible()||!lastLayout)return;
+    const vp=panelMap.querySelector('.iso-viewport');
+    if(!vp)return;
+    const vw=vp.clientWidth,vh=vp.clientHeight;
+    if(!vw||!vh)return;
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    ids.forEach(id=>{
+      const cell=lastLayout.cellsLogical.find(c=>c.type==='plot'&&c.blockId===id);
+      if(!cell)return;
+      const foot=cell.foot||1;
+      const pos=toPixelForFoot(cell.row,cell.col,lastLayout.totalRows,foot);
+      minX=Math.min(minX,pos.x);maxX=Math.max(maxX,pos.x+TILE_W*foot);
+      minY=Math.min(minY,pos.y-40*foot); // 建物の背の分、上にも余白をとる
+      maxY=Math.max(maxY,pos.y+TILE_H*foot);
+    });
+    if(!isFinite(minX))return;
+    const inside=minX*isoScale+panX>=8&&maxX*isoScale+panX<=vw-8&&minY*isoScale+panY>=8&&maxY*isoScale+panY<=vh-8;
+    if(inside)return;
+    const m=16;
+    const s=Math.max(0.2,Math.min((vw-m*2)/(maxX-minX),(vh-m*2)/(maxY-minY),1.2));
+    isoScale=s;
+    panX=vw/2-((minX+maxX)/2)*s;
+    panY=vh/2-((minY+maxY)/2)*s;
+    applyIsoTransform(panelMap);
   }
   // 建てたあとの最初の操作（画面のどこかを押す・ドラッグ・拡大縮小・タブ切り替え・キー操作）で止める
   // 数えないもの：①新しいプロジェクトのモーダルが開いている間（閉じる前の操作）②地図が見えていない間（スマホで別のタブを見ているとき。地図が見える状態になってから数える）
@@ -2600,6 +2682,8 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     if(newPlotHintIds.size===0)return;
     if(!newprojModal.hidden)return;
     if(!mapIsVisible())return;
+    // パネルを閉じた直後の1.5秒は数えない（「この内容で建てる」を続けて押した・押し直した、閉じたあとの勢いの操作で、見る前に消えないように）
+    if(Date.now()-newPlotHintArmedAt<1500)return;
     if(e.repeat)return; // キーを押しっぱなしの繰り返し（「この内容で建てる」をEnterで押したままのとき）は数えない
     if(e.type==='keydown'&&(e.key==='Shift'||e.key==='Control'||e.key==='Alt'||e.key==='Meta'))return;
     clearNewPlotHint();
