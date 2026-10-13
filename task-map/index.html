@@ -294,8 +294,8 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
 .npcard.npcard-flash{animation:npcard-flash .6s ease-in-out 3}
 @keyframes npcard-flash{0%,100%{background:var(--card)}50%{background:rgba(255,150,180,.5)}}
 /* ---- 建てたあとの予定地（2026-10-13追加：できた区画に薄いピンクをゆっくり点滅。地図の座標の中に置くので拡大・ドラッグに付いてくる。次の操作で消す） ---- */
-.iso-newplot-hint{position:absolute;left:8px;top:128px;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);background:rgba(255,150,180,.4);pointer-events:none;animation:iso-newplot-pulse 2.6s ease-in-out infinite}
-@keyframes iso-newplot-pulse{0%,100%{opacity:.4}50%{opacity:1}}
+.iso-newplot-hint{position:absolute;left:8px;top:128px;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);background:rgba(255,150,180,.5);pointer-events:none;animation:iso-newplot-pulse 2.6s ease-in-out infinite}
+@keyframes iso-newplot-pulse{0%,100%{opacity:.55}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){.npcard.npcard-flash{animation:none}.iso-newplot-hint{animation:none}}
 </style>
 </head>
@@ -312,8 +312,8 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
 
 <div class="bubble-mode-toggle">
   <span class="bubble-mode-label">吹き出しの出し方（仮）：</span>
-  <button type="button" class="bubble-mode-btn active" data-bubble="A">A</button>
-  <button type="button" class="bubble-mode-btn" data-bubble="B">B</button>
+  <button type="button" class="bubble-mode-btn" data-bubble="A">A</button>
+  <button type="button" class="bubble-mode-btn active" data-bubble="B">B</button>
 </div>
 
 <!-- ============ 声の入力の試し方（仮・2026-10-07追加） ============ -->
@@ -495,7 +495,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     {id:'res5',initials:'H.I',fullName:'石田 寛（仮）',daysInactive:12},
     {id:'res6',initials:'K.T',fullName:'高橋 健二（仮）',daysInactive:1}
   ];
-  let bubbleMode='A'; // 吹き出しの出し方（仮）A/B
+  let bubbleMode='B'; // 吹き出しの出し方（仮）A/B。2026-10-13にBに決定したので初期値はB（切り替えボタンは残す。下のボタンのactiveもBに合わせる）
   const dismissedCommitments=new Set(); // 住民の約束一覧で「やらない」を押した行（resId|bId:pId）
 
   // ---- データ（重要度imp・緊急度urgは（仮）） ----
@@ -2559,13 +2559,20 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     // できた予定地に薄いピンクを重ねて、次の操作まで点滅させる（renderMapIntoがnewPlotHintIdsを見て各区画に重ねる）
     newPlotHintIds.clear();
     createdBlocks.forEach(b=>newPlotHintIds.add(b.id));
+    // 建てるのに成功したら（全部のカードが答え済みで1件以上建ったとき）パネルを自動で閉じて地図を見せる（2026-10-13ちびぃ実機の気づき）
+    // 未回答が残るときは上のreturnでここに来ないので、今までどおりパネルは開いたまま
+    resetVoiceUI();
+    newprojModal.hidden=true;
+    npResult.hidden=true;
+    // スマホのタブ表示で地図以外のタブにいたら、地図タブに切り替える（PCの3つ並べはそのまま）。
+    // 閉じる操作・この自動の切り替えはプログラムが行うもので、onOperationAfterBuild（ちびぃのpointerdown／keydownだけを数える）には数えられない
+    if(currentMode==='mobile'&&currentTab!=='map'){
+      currentTab='map';
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab==='map'));
+      mountPanels();
+    }
     renderAll();
     ensureNewPlotVisible(createdBlocks[0].id);
-    npSuccess.hidden=false;
-    document.getElementById('newproj-success-text').textContent=createdBlocks.length>=2
-      ?createdBlocks.length+'件のプロジェクトを地図に作りました。'
-      :'「'+createdBlocks[0].name+'」の街区を地図に作りました。';
-    npResult.hidden=true;
   });
 
   // ---- 建てたあとの予定地の点滅（2026-10-13追加） ----
@@ -2593,6 +2600,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     if(newPlotHintIds.size===0)return;
     if(!newprojModal.hidden)return;
     if(!mapIsVisible())return;
+    if(e.repeat)return; // キーを押しっぱなしの繰り返し（「この内容で建てる」をEnterで押したままのとき）は数えない
     if(e.type==='keydown'&&(e.key==='Shift'||e.key==='Control'||e.key==='Alt'||e.key==='Meta'))return;
     clearNewPlotHint();
   }
