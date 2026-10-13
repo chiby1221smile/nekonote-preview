@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
+<meta name="robots" content="noindex,nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>（仮）タスクの街の地図｜社内モック 10/4版</title>
 <link rel="icon" href="https://raw.githubusercontent.com/chiby1221smile/nekonote-assets/main/tegaki_nikuQ.png">
@@ -70,6 +70,10 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
 .iso-neglect-weeds-wrap,.iso-neglect-crow-wrap{position:absolute;pointer-events:none}
 .iso-neglect-weeds-img,.iso-neglect-crow-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 .iso-neglect-fallback{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:11px;line-height:1;text-align:center;white-space:nowrap}
+/* 放置の建物の地面のひし形（2026-10-13：どの区画か分かるように。火事＝薄いオレンジ、雑草・カラス＝薄い茶色。縁取りは拡大しても細くならない） */
+.iso-neglect-ground{position:absolute;pointer-events:none;overflow:visible}
+.iso-neglect-ground polygon{fill:rgba(140,110,60,.16);stroke:rgba(120,95,50,.7);stroke-width:2;vector-effect:non-scaling-stroke}
+.iso-neglect-ground.is-fire polygon{fill:rgba(255,150,50,.38);stroke:rgba(230,110,20,.95);stroke-width:2.5}
 .iso-smoke{position:absolute;pointer-events:none}
 .iso-smoke-puff{position:absolute;left:50%;bottom:0;width:var(--smoke-size,16px);height:var(--smoke-size,16px);margin-left:calc(var(--smoke-size,16px)/-2);border-radius:50%;background:var(--map-smoke-dark);opacity:0;transform:translate(0,0) scale(.6);animation:iso-smoke-rise 2.6s ease-out infinite}
 .iso-smoke-puff:nth-child(1){animation-delay:0s;left:50%;--drift:5px}
@@ -151,8 +155,10 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
 /* ---- 4象限 ---- */
 .q-note{font-size:12px;color:var(--sub);margin:0 0 8px}
 .q-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;height:340px}
-.q-cell{border:1px solid var(--line);border-radius:6px;background:var(--card);padding:6px;overflow-y:auto}
-.q-cell-label{font-size:10px;font-weight:800;color:var(--sub);margin:0 0 5px}
+/* 2026-10-13：見出しはマスの上に固定し、スクロールするのはタスクの一覧（.q-items）だけにする（マス自体は縦に並べて、あふれは.q-itemsが受ける） */
+.q-cell{display:flex;flex-direction:column;min-height:0;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:6px;overflow:hidden}
+.q-cell-label{flex:none;font-size:10px;font-weight:800;color:var(--sub);margin:0 0 5px}
+.q-items{flex:1 1 auto;min-height:0;overflow-y:auto}
 .q-chip{display:inline-flex;align-items:flex-start;gap:3px;max-width:100%;border:1px solid var(--line);background:var(--paper2);border-radius:10px;padding:3px 7px;margin:0 3px 5px 0;font-size:11px;color:var(--ink);cursor:pointer}
 .q-chip.is-hl{background:var(--red);border-color:var(--red-dark);color:#3a2d00}
 .q-chip .qt-wrap{display:flex;flex-direction:column;max-width:140px}
@@ -279,6 +285,18 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
 .npcard .breakdown-remove{appearance:none;border:1px solid var(--line);background:var(--paper2);color:var(--sub);font:inherit;font-size:.78rem;border-radius:4px;padding:4px 8px;cursor:pointer;white-space:nowrap;min-width:44px;flex:none}
 .btn-subtle{background:var(--card);border-color:var(--line);color:var(--sub);box-shadow:none}
 .btn-subtle:hover{background:var(--paper2);border-color:var(--line);color:var(--sub)}
+/* ---- 答えていない質問を分かりやすくする（2026-10-13追加：番号・未回答の質問のかたまりの薄いピンク・点滅。色だけに頼らず文字も出す） ---- */
+.npcard-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 8px}
+.npcard-no{font-size:14px;font-weight:800;color:var(--ink)}
+.npcard-unanswered-badge{font-size:11px;font-weight:700;color:var(--ink);background:var(--light-red);border:1px solid var(--red-dark);border-radius:10px;padding:1px 8px}
+.npcard-field.npcard-field-invalid{background:rgba(255,150,180,.3);border-radius:6px;padding:8px;box-shadow:inset 0 0 0 1px rgba(214,90,130,.45)}
+.npcard-field.npcard-field-invalid .npcard-hint{background:transparent;border-left-color:rgba(214,90,130,.8)}
+.npcard.npcard-flash{animation:npcard-flash .6s ease-in-out 3}
+@keyframes npcard-flash{0%,100%{background:var(--card)}50%{background:rgba(255,150,180,.5)}}
+/* ---- 建てたあとの予定地（2026-10-13追加：できた区画に薄いピンクをゆっくり点滅。地図の座標の中に置くので拡大・ドラッグに付いてくる。次の操作で消す） ---- */
+.iso-newplot-hint{position:absolute;left:8px;top:128px;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);background:rgba(255,150,180,.4);pointer-events:none;animation:iso-newplot-pulse 2.6s ease-in-out infinite}
+@keyframes iso-newplot-pulse{0%,100%{opacity:.4}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.npcard.npcard-flash{animation:none}.iso-newplot-hint{animation:none}}
 </style>
 </head>
 <body>
@@ -431,7 +449,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       </div>
       <p class="muted" style="font-size:11px;margin:0 0 8px">（仮）この見本は「、」などの区切りで分けます。本番はAIが内容を読んで分けます</p>
       <div id="newproj-cards"></div>
-      <p class="msg" id="newproj-incomplete-error" hidden>期限と「ホントにやる？」に答えていないプロジェクトがあります（仮）</p>
+      <p class="msg" id="newproj-incomplete-error" hidden>期限と「いつ取りかかる？」に答えていないプロジェクトがあります</p>
       <p class="msg" id="newproj-none-error" hidden>作るプロジェクトがありません（仮）</p>
       <div style="margin-top:10px"><button class="btn primary" type="button" id="newproj-create-btn">この内容で建てる（0件）</button></div>
     </div>
@@ -563,6 +581,8 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     ]});
   }
   let lastBuiltKey=null,currentTask=null;
+  // 「この内容で建てる」で新しくできた区画のid。入っている間、その区画に薄いピンクの点滅を重ねる（次の操作で空にする）
+  const newPlotHintIds=new Set();
   // ======== 選択状態（1か所にまとめる。2026-10-04：3つの見方の連動を直すため） ========
   // null | {kind:'task',bId,pId} | {kind:'building',blockId} | {kind:'resident',residentId}
   let selection=null;
@@ -1088,11 +1108,23 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
           bodyHit.style.height=bodyHitHeight+'px';
           tile.appendChild(bodyHit);
         }
+        // 建てたあとの予定地（2026-10-13）：地面のひし形（.iso-tile-hit）と同じ位置・大きさに、薄いピンクをゆっくり点滅させて重ねる
+        // pointer-events:noneなので建物を押す動きは変わらない。タイルの中に置くので拡大・ドラッグに付いてくる
+        if(newPlotHintIds.has(block.id)){
+          const nh=document.createElement('span');
+          nh.className='iso-newplot-hint';
+          nh.style.width=tileW+'px';nh.style.height=tileH+'px';
+          tile.appendChild(nh);
+        }
         // 放置（2026-10-05・仮）：押しても何も起きない飾り（当たり判定の上に重ねるがpointer-events:noneなので建物を押す動きは変わらない）
         const neglectLv=neglectStageOf(block);
         if(neglectLv>=1){
           tile.classList.add('iso-neglect-'+neglectLv);
           let neglectHtml='';
+          // どの区画の建物か分かるように、放置の建物の地面のひし形を色で敷いて縁取る（2026-10-13：炎・煙・雑草・カラスがかかっていても区画が分かるように）
+          // 火事（消火前）＝薄いオレンジ／雑草・カラス（と消火後）＝薄い茶色。炎・煙・雑草より下に描く（後ろのneglectHtmlが上に重なる）
+          const groundIsFire=neglectLv>=3&&!block._fireQuenched;
+          neglectHtml+=`<svg class="iso-neglect-ground${groundIsFire?' is-fire':''}" style="left:8px;top:128px;width:${tileW}px;height:${tileH}px" viewBox="0 0 100 50" preserveAspectRatio="none" aria-hidden="true"><polygon points="50,1 99,25 50,49 1,25"/></svg>`;
           const wSize=tileW*0.46,wLeft=boxW/2-wSize/2,wTop=boxH-tileH*0.82;
           neglectHtml+=`<div class="iso-neglect-weeds-wrap" style="left:${wLeft}px;top:${wTop}px;width:${wSize}px;height:${(wSize*0.7).toFixed(1)}px"><img class="iso-neglect-weeds-img" src="モック素材_20261004/overlay_weeds.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="iso-neglect-fallback">🌿🌿🌿</span></div>`;
           if(neglectLv>=2){
@@ -1115,8 +1147,9 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
             // 煙（2026-10-05・仮：丸い玉の代わりにoverlay_smoke.pngを使う。絵が読めないときだけ丸い玉の煙を出す）
             // 煙の絵の下の端を炎（fire1）の上から3割あたりに重ね、炎の後ろから立ちのぼって見えるようにする。横幅は炎（fire1）の横幅と同じくらい
             const smokeImgBottomFrac=0.96; // overlay_smoke.pngは256×382で、不透明部分（煙）の下端は絵の高さの約96%の位置
-            const smokeW=fireW,smokeH=smokeW*382/256;
-            const smokeOverlapY=fire1Top+fireH*0.3;
+            // 2026-10-13：煙が上に伸びて奥の建物にかかっていたため、幅を炎の65%に小さくし、下の端を炎の上から45%に下げて、高さをおさえた
+            const smokeW=fireW*0.65,smokeH=smokeW*382/256;
+            const smokeOverlapY=fire1Top+fireH*0.45;
             const smokeLeft=groundCenterX-smokeW/2,smokeTop=smokeOverlapY-smokeH*smokeImgBottomFrac;
             const outClass=block._fireQuenched?' is-out':'';
             const smokeSize=22*foot,smokeRise=85*foot; // 絵が読めないときの丸い玉フォールバック用（今までと同じ計算）
@@ -1619,11 +1652,13 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   }
   function buildQuadrantRoot(){
     const root=document.createElement('div');
+    // 2026-10-13：置き方と名前を決定どおりに変更。左上＝大事で急ぎ／右上＝大事で急がない／左下＝大事ではないが急ぎ／右下＝どちらでもない
+    // （data-imp／data-urg＝内部の値は変えない。並び順だけ入れ替えた）
     root.innerHTML=`<p class="q-note">重要度・緊急度は（仮）の値です</p><div class="q-grid">
-      <div class="q-cell" data-q="hh-hu"><p class="q-cell-label">重要・緊急</p><div class="q-items" data-imp="high" data-urg="high"></div></div>
-      <div class="q-cell" data-q="hl-hu"><p class="q-cell-label">緊急（重要度は低め）</p><div class="q-items" data-imp="low" data-urg="high"></div></div>
-      <div class="q-cell" data-q="hh-lu"><p class="q-cell-label">重要（急ぎではない）</p><div class="q-items" data-imp="high" data-urg="low"></div></div>
-      <div class="q-cell" data-q="hl-lu"><p class="q-cell-label">そのほか</p><div class="q-items" data-imp="low" data-urg="low"></div></div>
+      <div class="q-cell" data-q="hh-hu"><p class="q-cell-label">いちばん先にやる</p><div class="q-items" data-imp="high" data-urg="high"></div></div>
+      <div class="q-cell" data-q="hh-lu"><p class="q-cell-label">日を決めてやる</p><div class="q-items" data-imp="high" data-urg="low"></div></div>
+      <div class="q-cell" data-q="hl-hu"><p class="q-cell-label">手早く片づける</p><div class="q-items" data-imp="low" data-urg="high"></div></div>
+      <div class="q-cell" data-q="hl-lu"><p class="q-cell-label">今は置いておく</p><div class="q-items" data-imp="low" data-urg="low"></div></div>
     </div>`;
     return root;
   }
@@ -1734,6 +1769,22 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       const sec=panelList.querySelector('.list-block[data-block="'+blockId+'"]');
       if(sec)sec.scrollIntoView({block:'start',behavior:'smooth'});
     });
+  }
+
+  // ---- 光ったタスクが下に隠れないようにする（2026-10-13追加） ----
+  // 4象限の各マス（.q-items）とリスト（.list-wrap）の「中だけ」を、光った最初のタスクが見える位置までなめらかに動かす。
+  // scrollIntoViewは使わない（ページ全体まで動いてしまうため。箱のscrollTopだけ動かす）
+  function scrollBoxToShow(box,el){
+    if(!box||!el)return;
+    const b=box.getBoundingClientRect(),r=el.getBoundingClientRect();
+    if(b.height===0)return; // 画面に出ていない（スマホで別のタブを見ているとき）
+    if(r.top>=b.top&&r.bottom<=b.bottom)return; // もう見えている
+    // 見えていないときは、光ったタスクが箱の一番上に来るようにする（続きの光ったタスクも下に見えやすいため）
+    box.scrollTo({top:Math.max(0,box.scrollTop+(r.top-b.top)-4),behavior:'smooth'});
+  }
+  function scrollHighlightsIntoView(){
+    panelQuadrant.querySelectorAll('.q-items').forEach(wrap=>scrollBoxToShow(wrap,wrap.querySelector('.q-chip.is-hl')));
+    scrollBoxToShow(panelList.querySelector('.list-wrap'),panelList.querySelector('.list-row.is-hl'));
   }
 
   // ======== 選択したものの出し方（仮：A／B） ========
@@ -1890,6 +1941,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     showNameTagFor(bId);
     const viewRoot=panelRootOf(anchorEl);
     renderAll();
+    scrollHighlightsIntoView();
     if(already){openTaskModal(bId,pId);return;}
     showBubbleForSelection(findFreshAnchorFor(selection,viewRoot));
   }
@@ -1898,6 +1950,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     showNameTagFor(blockId);
     const viewRoot=panelRootOf(anchorEl);
     renderAll();
+    scrollHighlightsIntoView();
     showBubbleForSelection(findFreshAnchorFor(selection,viewRoot));
   }
   function selectResident(residentId,anchorEl){
@@ -1946,8 +1999,10 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     {id:'d2',label:'必要な人に声をかける（仮）',imp:'high',urg:'low'},
     {id:'d3',label:'期限を決める（仮）',imp:'low',urg:'high'}
   ];
-  // 「ホントにやる？」の選択肢（仮。仕様書REALLY_DOING_OPTIONSの初期値をそのまま使う。文言は相談中）
-  const REALLY_DOING_OPTIONS_DEMO=['やる','まだ決めてない','やらない'];
+  // 「いつ取りかかる？」の選択肢（2026-10-13決定。旧「ホントにやる？」のやる／まだ決めてない／やらない。変数名・保存する値の位置は旧いまま）
+  // 3つ目（今はまだアイデア段階）を選んだときだけ、カードに「扱いは仕様書で決めます」の注記を出す
+  const REALLY_DOING_OPTIONS_DEMO=['すぐ取りかかる','近いうちに','今はまだアイデア段階'];
+  const REALLY_DOING_IDEA_ONLY=REALLY_DOING_OPTIONS_DEMO[2];
   const newprojModal=document.getElementById('newproj-modal');
   const npInput=document.getElementById('newproj-input');
   const npEmptyErr=document.getElementById('newproj-empty-error');
@@ -2256,6 +2311,42 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     const reallyOk=!!card.reallyAnswer;
     return !(dueOk&&reallyOk);
   }
+  // 「この内容で建てる」を押したあとに出す文：どの件のどの質問に答えていないかを書く
+  // 例：2件目『○○』の期限、4件目『○○』の『いつ取りかかる？』にまだ答えていません（2026-10-13）
+  function incompleteMessageText(){
+    const items=[];
+    npCards.forEach((card,i)=>{
+      const parts=[];
+      if(!(card.dueNone||card.dueValue))parts.push('期限');
+      if(!card.reallyAnswer)parts.push('『いつ取りかかる？』');
+      if(parts.length===0)return;
+      const nm=card.name.trim();
+      const shortName=nm?(nm.length>14?nm.slice(0,14)+'…':nm):'名前なし';
+      items.push((i+1)+'件目『'+shortName+'』の'+parts.join('と'));
+    });
+    return items.length?items.join('、')+'にまだ答えていません':'';
+  }
+  // 押したあとだけ出す。答えるたびに書き直し、全部答えたら消える
+  function refreshIncompleteMessage(){
+    const text=showCardErrors?incompleteMessageText():'';
+    if(text)npIncompleteErr.textContent=text;
+    npIncompleteErr.hidden=!text;
+  }
+  // 最初の「問題のあるカード」（質問に答えていない、または小さなタスクが0件）を返す
+  function firstProblemCardEl(){
+    const target=npCards.find(c=>cardIsIncomplete(c)||c.tasks.length===0);
+    if(!target)return null;
+    return npCardsWrap.querySelector('[data-npcard-id="'+target.id+'"]');
+  }
+  // そのカードまで画面をなめらかに動かして、2〜3回点滅させる
+  function scrollAndFlashCard(el){
+    if(!el)return;
+    el.classList.remove('npcard-flash');
+    void el.offsetWidth; // 連続して押したときも、点滅を最初からやり直す
+    el.classList.add('npcard-flash');
+    el.addEventListener('animationend',()=>el.classList.remove('npcard-flash'),{once:true});
+    el.scrollIntoView({behavior:'smooth',block:'start'});
+  }
   function updateCreateBtnLabel(){
     npCreateBtn.textContent='この内容で建てる（'+npCards.length+'件）';
   }
@@ -2269,11 +2360,17 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
   function renderCards(){
     npCardsWrap.innerHTML='';
     npCards.forEach((card,idx)=>{
-      const incomplete=cardIsIncomplete(card);
       const zero=card.tasks.length===0;
       const div=document.createElement('div');
-      div.className='npcard'+((showCardErrors&&incomplete)?' npcard-invalid':'');
+      div.className='npcard';
       div.dataset.npcardId=card.id;
+
+      // 見出し：「1件目」などの番号（2026-10-13追加）。答えていない質問があるときは、色だけでなく文字でも「未回答あり」を出す
+      const head=document.createElement('div');head.className='npcard-head';
+      const noEl=document.createElement('span');noEl.className='npcard-no';noEl.textContent=(idx+1)+'件目';
+      const badge=document.createElement('span');badge.className='npcard-unanswered-badge';
+      head.appendChild(noEl);head.appendChild(badge);
+      div.appendChild(head);
 
       const nameLabel=document.createElement('p');nameLabel.className='npcard-label';nameLabel.textContent='プロジェクトの名前（仮）';
       div.appendChild(nameLabel);
@@ -2281,16 +2378,15 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       nameInput.type='text';nameInput.className='npcard-name';nameInput.value=card.name;
       nameInput.placeholder=card.placeholderName||'';
       nameInput.setAttribute('aria-label','プロジェクト名');
-      nameInput.addEventListener('input',()=>{card.name=nameInput.value;});
+      nameInput.addEventListener('input',()=>{card.name=nameInput.value;refreshIncompleteMessage();});
       div.appendChild(nameInput);
 
       const dueField=document.createElement('div');dueField.className='npcard-field';
       const dueLabel=document.createElement('p');dueLabel.className='npcard-label';dueLabel.textContent='期限はありますか？';
       dueField.appendChild(dueLabel);
-      if(showCardErrors&&!(card.dueNone||card.dueValue)){
-        const dueHint=document.createElement('p');dueHint.className='npcard-hint';dueHint.textContent='ここに答えてください（仮）';
-        dueField.appendChild(dueHint);
-      }
+      // 「↓ここを選んでください」は常に作って、答えたらその場で隠す（syncMarks）。「期限」の質問のかたまりごと薄いピンクにする
+      const dueHint=document.createElement('p');dueHint.className='npcard-hint';dueHint.textContent='↓ここを選んでください';
+      dueField.appendChild(dueHint);
       const dueRow=document.createElement('div');dueRow.className='npcard-due-row';
       const dateInput=document.createElement('input');
       dateInput.type='date';dateInput.className='npcard-date';
@@ -2301,37 +2397,62 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       dateInput.addEventListener('input',()=>{
         card.dueValue=dateInput.value;card.dueNone=false;
         noneBtn.classList.add('is-off');dateInput.disabled=false;
+        syncMarks();
       });
       noneBtn.addEventListener('click',()=>{
         card.dueNone=!card.dueNone;
         if(card.dueNone){card.dueValue='';dateInput.value='';}
         dateInput.disabled=card.dueNone;
         noneBtn.classList.toggle('is-off',!card.dueNone);
+        syncMarks();
       });
       dueRow.appendChild(dateInput);dueRow.appendChild(noneBtn);
       dueField.appendChild(dueRow);
       div.appendChild(dueField);
 
       const reallyField=document.createElement('div');reallyField.className='npcard-field';
-      const reallyLabel=document.createElement('p');reallyLabel.className='npcard-label';reallyLabel.textContent='ホントにやる？（仮）';
+      const reallyLabel=document.createElement('p');reallyLabel.className='npcard-label';reallyLabel.textContent='いつ取りかかる？';
       reallyField.appendChild(reallyLabel);
-      if(showCardErrors&&!card.reallyAnswer){
-        const reallyHint=document.createElement('p');reallyHint.className='npcard-hint';reallyHint.textContent='ここに答えてください（仮）';
-        reallyField.appendChild(reallyHint);
-      }
+      const reallyHint=document.createElement('p');reallyHint.className='npcard-hint';reallyHint.textContent='↓ここを選んでください';
+      reallyField.appendChild(reallyHint);
       const reallyRow=document.createElement('div');reallyRow.className='npcard-really-row';
+      const reallyBtns=[];
       REALLY_DOING_OPTIONS_DEMO.forEach(opt=>{
         const b=document.createElement('button');
         b.type='button';b.className='btn npcard-choice'+(card.reallyAnswer===opt?'':' is-off');b.textContent=opt;
-        b.addEventListener('click',()=>{card.reallyAnswer=opt;renderCards();});
+        // 押したあとは作り直さず、その場で色と注記と「未回答」の印だけ更新する（点滅やスクロール位置を壊さないため）
+        b.addEventListener('click',()=>{
+          card.reallyAnswer=opt;
+          reallyBtns.forEach(x=>x.btn.classList.toggle('is-off',card.reallyAnswer!==x.opt));
+          syncMarks();
+        });
+        reallyBtns.push({btn:b,opt:opt});
         reallyRow.appendChild(b);
       });
       reallyField.appendChild(reallyRow);
-      if(card.reallyAnswer==='やらない'){
-        const note=document.createElement('p');note.className='npcard-note';note.textContent='（仮）この扱いは仕様書で決めます';
-        reallyField.appendChild(note);
-      }
+      const reallyNote=document.createElement('p');reallyNote.className='npcard-note';reallyNote.textContent='（仮）この扱いは仕様書で決めます';
+      reallyField.appendChild(reallyNote);
       div.appendChild(reallyField);
+
+      // 答えていない質問のかたまりの印（薄いピンク・「↓ここを選んでください」・見出しの「未回答」）を、今の答えに合わせて付け外しする
+      // 「この内容で建てる」を押したあと（showCardErrors）だけ出す。答えたらその場で消える
+      function syncMarks(){
+        const dueMiss=showCardErrors&&!(card.dueNone||card.dueValue);
+        const reallyMiss=showCardErrors&&!card.reallyAnswer;
+        dueField.classList.toggle('npcard-field-invalid',dueMiss);
+        dueHint.hidden=!dueMiss;
+        reallyField.classList.toggle('npcard-field-invalid',reallyMiss);
+        reallyHint.hidden=!reallyMiss;
+        reallyNote.hidden=(card.reallyAnswer!==REALLY_DOING_IDEA_ONLY);
+        const missing=[];
+        if(dueMiss)missing.push('期限');
+        if(reallyMiss)missing.push('いつ取りかかる？');
+        badge.hidden=missing.length===0;
+        badge.textContent='未回答：'+missing.join('・');
+        div.classList.toggle('npcard-invalid',missing.length>0);
+        refreshIncompleteMessage();
+      }
+      syncMarks();
 
       const taskField=document.createElement('div');taskField.className='npcard-field';
       const taskLabel=document.createElement('p');taskLabel.className='npcard-label';taskLabel.textContent='小さなタスク';
@@ -2374,6 +2495,7 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
 
       npCardsWrap.appendChild(div);
     });
+    refreshIncompleteMessage(); // カードが0枚になったときなども、文を今の状態に合わせる
     updateCreateBtnLabel();
   }
   npMergeBtn.addEventListener('click',()=>{
@@ -2421,9 +2543,12 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     showCardErrors=true;
     const incomplete=npCards.some(cardIsIncomplete);
     const zero=npCards.some(c=>c.tasks.length===0);
-    renderCards();
-    npIncompleteErr.hidden=!incomplete;
-    if(incomplete||zero)return;
+    renderCards(); // 未回答のカード・質問のかたまりの印と、npIncompleteErrの文もここで出る（refreshIncompleteMessage）
+    if(incomplete||zero){
+      // 最初の問題のあるカードまで画面を動かして点滅させる（どれがダメか分かるように。2026-10-13）
+      scrollAndFlashCard(firstProblemCardEl());
+      return;
+    }
     const stamp=Date.now();
     const createdBlocks=npCards.map((card,i)=>({
       id:'proj-'+stamp+'-'+i,
@@ -2431,13 +2556,48 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
       plots:card.tasks.map((t,j)=>({id:t.id+'-'+stamp+'-'+i+'-'+j,label:t.label,state:'empty',imp:t.imp,urg:t.urg}))
     }));
     createdBlocks.forEach(b=>blocks.push(b));
+    // できた予定地に薄いピンクを重ねて、次の操作まで点滅させる（renderMapIntoがnewPlotHintIdsを見て各区画に重ねる）
+    newPlotHintIds.clear();
+    createdBlocks.forEach(b=>newPlotHintIds.add(b.id));
     renderAll();
+    ensureNewPlotVisible(createdBlocks[0].id);
     npSuccess.hidden=false;
     document.getElementById('newproj-success-text').textContent=createdBlocks.length>=2
       ?createdBlocks.length+'件のプロジェクトを地図に作りました。'
       :'「'+createdBlocks[0].name+'」の街区を地図に作りました。';
     npResult.hidden=true;
   });
+
+  // ---- 建てたあとの予定地の点滅（2026-10-13追加） ----
+  // できた区画が画面の外にあるときだけ、その区画が地図のまん中に来るようにパン位置を動かす（見えていれば動かさない）
+  function ensureNewPlotVisible(blockId){
+    if(!mapIsVisible()||!lastLayout)return;
+    const cell=lastLayout.cellsLogical.find(c=>c.type==='plot'&&c.blockId===blockId);
+    const vp=panelMap.querySelector('.iso-viewport');
+    if(!cell||!vp)return;
+    const vw=vp.clientWidth,vh=vp.clientHeight;
+    if(!vw||!vh)return;
+    const foot=cell.foot||1;
+    const pos=toPixelForFoot(cell.row,cell.col,lastLayout.totalRows,foot);
+    const sx=(pos.x+TILE_W*foot/2)*isoScale+panX,sy=(pos.y+TILE_H*foot/2)*isoScale+panY;
+    if(sx<24||sx>vw-24||sy<24||sy>vh-24)centerMapOnBlock(blockId);
+  }
+  // 点滅を止めて消す（描き直しはしない。今ある印を外すだけ）
+  function clearNewPlotHint(){
+    newPlotHintIds.clear();
+    panelMap.querySelectorAll('.iso-newplot-hint').forEach(el=>el.remove());
+  }
+  // 建てたあとの最初の操作（画面のどこかを押す・ドラッグ・拡大縮小・タブ切り替え・キー操作）で止める
+  // 数えないもの：①新しいプロジェクトのモーダルが開いている間（閉じる前の操作）②地図が見えていない間（スマホで別のタブを見ているとき。地図が見える状態になってから数える）
+  function onOperationAfterBuild(e){
+    if(newPlotHintIds.size===0)return;
+    if(!newprojModal.hidden)return;
+    if(!mapIsVisible())return;
+    if(e.type==='keydown'&&(e.key==='Shift'||e.key==='Control'||e.key==='Alt'||e.key==='Meta'))return;
+    clearNewPlotHint();
+  }
+  document.addEventListener('pointerdown',onOperationAfterBuild,true);
+  document.addEventListener('keydown',onOperationAfterBuild,true);
 
   // ======== モード・タブ・まとめ描画 ========
   const panelMap=buildMapRoot();
@@ -2482,13 +2642,13 @@ body{margin:0;padding:22px 12px 60px;background:#f4f1e8;color:#232f3a;font-famil
     document.getElementById('mobile-wrap').hidden=(currentMode!=='mobile');
     document.getElementById('pc-wrap').hidden=(currentMode!=='pc');
     mountPanels();
-    requestAnimationFrame(renderAll);
+    requestAnimationFrame(()=>{renderAll();scrollHighlightsIntoView();}); // 付け替えると箱の位置が0に戻るので、光っているタスクのところへ動かし直す
   }));
   document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>{
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b===btn));
     currentTab=btn.dataset.tab;
     mountPanels();
-    requestAnimationFrame(renderAll);
+    requestAnimationFrame(()=>{renderAll();scrollHighlightsIntoView();}); // タブを開き直すと箱の位置が0に戻るので、光っているタスクのところへ動かし直す
   }));
   document.getElementById('home-open-btn').addEventListener('click',()=>{
     document.getElementById('demo-home').classList.remove('active');
